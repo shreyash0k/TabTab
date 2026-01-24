@@ -42,12 +42,17 @@ app/
 ## Key Implementation Details
 
 ### Ghost Text Overlay
-Uses dual-layer technique: transparent textarea over a mirror div that renders suggestions in gray.
+Uses dual-layer technique: transparent textarea over a mirror div that renders suggestions in gray at the cursor position.
+
+### Cursor Position Tracking
+- Tracks cursor position via `onSelect` and `onClick` events
+- Suggestions only appear when cursor is at end of text (avoids ghost text overlap)
+- Accepting inserts at cursor position using `setSelectionRange`
 
 ### Suggestion Flow
-1. User types → 300ms debounce → POST to `/api/suggest`
-2. Groq returns completion → displayed as ghost text
-3. Tab accepts, Escape dismisses, typing clears
+1. User types → 300ms debounce → POST to `/api/suggest` with text before cursor
+2. Groq returns completion → displayed as ghost text at cursor
+3. Tab accepts (inserts at cursor), Escape dismisses, typing clears
 
 ### API Configuration
 - Model: `llama-3.1-8b-instant`

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, KeyboardEvent, ChangeEvent } from 'react';
+import { useRef, useEffect, KeyboardEvent, ChangeEvent, SyntheticEvent } from 'react';
 import { useAutocomplete } from '../hooks/useAutocomplete';
 
 interface AutocompleteTextareaProps {
@@ -18,7 +18,9 @@ export function AutocompleteTextarea({
   const {
     text,
     suggestion,
+    cursorPosition,
     setText,
+    setCursorPosition,
     acceptSuggestion,
     dismissSuggestion,
     isLoading,
@@ -41,14 +43,31 @@ export function AutocompleteTextarea({
   }, []);
 
   const handleChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
-    setText(e.target.value);
+    const newCursorPos = e.target.selectionStart ?? 0;
+    setText(e.target.value, newCursorPos);
+  };
+
+  // Track cursor position on selection change (click, arrow keys, etc.)
+  const handleSelect = (e: SyntheticEvent<HTMLTextAreaElement>) => {
+    const target = e.target as HTMLTextAreaElement;
+    const newCursorPos = target.selectionStart ?? 0;
+    // Only update if cursor actually moved (not during typing which is handled by onChange)
+    if (newCursorPos !== cursorPosition) {
+      setCursorPosition(newCursorPos);
+    }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // Tab key accepts the suggestion
     if (e.key === 'Tab' && suggestion) {
       e.preventDefault();
-      acceptSuggestion();
+      const newCursorPos = acceptSuggestion();
+      // Restore cursor position after React re-renders
+      requestAnimationFrame(() => {
+        if (textareaRef.current) {
+          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        }
+      });
       return;
     }
 
@@ -89,12 +108,14 @@ export function AutocompleteTextarea({
           letterSpacing: 'normal',
         }}
       >
-        {/* Invisible text that matches user input (for positioning) */}
-        <span className="invisible">{text}</span>
-        {/* Ghost suggestion text */}
+        {/* Text before cursor (invisible - for positioning) */}
+        <span className="invisible">{text.slice(0, cursorPosition)}</span>
+        {/* Ghost suggestion text at cursor position */}
         {suggestion && (
           <span className="text-gray-400">{suggestion}</span>
         )}
+        {/* Text after cursor (invisible) */}
+        <span className="invisible">{text.slice(cursorPosition)}</span>
       </div>
 
       {/* Actual textarea layer */}
@@ -103,6 +124,8 @@ export function AutocompleteTextarea({
         value={text}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
+        onSelect={handleSelect}
+        onClick={handleSelect}
         placeholder={placeholder}
         className={`
           ${sharedStyles}

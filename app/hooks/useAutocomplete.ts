@@ -8,8 +8,10 @@ const MIN_TEXT_LENGTH = 10;
 interface UseAutocompleteReturn {
   text: string;
   suggestion: string;
-  setText: (text: string) => void;
-  acceptSuggestion: () => void;
+  cursorPosition: number;
+  setText: (text: string, cursorPos: number) => void;
+  setCursorPosition: (pos: number) => void;
+  acceptSuggestion: () => number; // Returns new cursor position
   dismissSuggestion: () => void;
   isLoading: boolean;
 }
@@ -17,15 +19,23 @@ interface UseAutocompleteReturn {
 export function useAutocomplete(): UseAutocompleteReturn {
   const [text, setTextState] = useState('');
   const [suggestion, setSuggestion] = useState('');
+  const [cursorPosition, setCursorPositionState] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
   // Refs for managing async operations
   const abortControllerRef = useRef<AbortController | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastRequestedTextRef = useRef<string>('');
+  const lastRequestedCursorRef = useRef<number>(0);
 
   // Fetch suggestion from API
-  const fetchSuggestion = useCallback(async (inputText: string) => {
+  const fetchSuggestion = useCallback(async (inputText: string, cursorPos: number) => {
+    // Only suggest when cursor is at the end of text (avoids ghost text overlap issues)
+    if (cursorPos !== inputText.length) {
+      setSuggestion('');
+      return;
+    }
+    
     // Don't fetch for short text
     if (inputText.length < MIN_TEXT_LENGTH) {
       setSuggestion('');
@@ -40,6 +50,7 @@ export function useAutocomplete(): UseAutocompleteReturn {
     // Create new abort controller for this request
     abortControllerRef.current = new AbortController();
     lastRequestedTextRef.current = inputText;
+    lastRequestedCursorRef.current = cursorPos;
 
     setIsLoading(true);
 
@@ -59,8 +70,8 @@ export function useAutocomplete(): UseAutocompleteReturn {
 
       const data = await response.json();
 
-      // Only set suggestion if the text hasn't changed since we made the request
-      if (lastRequestedTextRef.current === inputText) {
+      // Only set suggestion if the text and cursor haven't changed since we made the request
+      if (lastRequestedTextRef.current === inputText && lastRequestedCursorRef.current === cursorPos) {
         setSuggestion(data.suggestion || '');
       }
     } catch (error) {
@@ -75,10 +86,18 @@ export function useAutocomplete(): UseAutocompleteReturn {
     }
   }, []);
 
+  // Update cursor position
+  const setCursorPosition = useCallback((pos: number) => {
+    setCursorPositionState(pos);
+    // Clear suggestion when cursor moves (user might be navigating)
+    setSuggestion('');
+  }, []);
+
   // Set text with debounced suggestion fetching
   const setText = useCallback(
-    (newText: string) => {
+    (newText: string, cursorPos: number) => {
       setTextState(newText);
+      setCursorPositionState(cursorPos);
 
       // Clear existing suggestion when text changes
       setSuggestion('');
@@ -90,19 +109,25 @@ export function useAutocomplete(): UseAutocompleteReturn {
 
       // Set new debounce timer
       debounceTimerRef.current = setTimeout(() => {
-        fetchSuggestion(newText);
+        fetchSuggestion(newText, cursorPos);
       }, DEBOUNCE_MS);
     },
     [fetchSuggestion]
   );
 
-  // Accept the current suggestion
+  // Accept the current suggestion - inserts at cursor position
   const acceptSuggestion = useCallback(() => {
     if (suggestion) {
-      setTextState((prev) => prev + suggestion);
+      const newCursorPos = cursorPosition + suggestion.length;
+      setTextState((prev) => 
+        prev.slice(0, cursorPosition) + suggestion + prev.slice(cursorPosition)
+      );
+      setCursorPositionState(newCursorPos);
       setSuggestion('');
+      return newCursorPos;
     }
-  }, [suggestion]);
+    return cursorPosition;
+  }, [suggestion, cursorPosition]);
 
   // Dismiss the current suggestion
   const dismissSuggestion = useCallback(() => {
@@ -124,7 +149,9 @@ export function useAutocomplete(): UseAutocompleteReturn {
   return {
     text,
     suggestion,
+    cursorPosition,
     setText,
+    setCursorPosition,
     acceptSuggestion,
     dismissSuggestion,
     isLoading,
