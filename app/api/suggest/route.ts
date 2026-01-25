@@ -44,7 +44,9 @@ export async function POST(request: NextRequest) {
           content: `You are a text completion assistant. Your task is to continue the user's text naturally.
 Rules:
 - Output ONLY the continuation text, nothing else
-- Keep it brief: 1-2 short sentences or a few words maximum
+- Keep it brief
+- If the input does not end with a space and your continuation starts with a new word, begin your output with a space
+- Use correct punctuation and capitalization
 - Match the style and tone of the existing text
 - Do not repeat any part of the input text
 - Do not add explanations or meta-commentary
@@ -61,7 +63,18 @@ Rules:
       top_p: 0.9,
     });
 
-    const suggestion = completion.choices[0]?.message?.content?.trim() || '';
+    let suggestion = completion.choices[0]?.message?.content?.trimEnd() || '';
+    
+    // Post-process: ensure proper spacing between input and suggestion
+    // If input doesn't end with whitespace and suggestion doesn't start with whitespace/punctuation
+    if (suggestion && text.length > 0) {
+      const lastChar = text[text.length - 1];
+      const firstChar = suggestion[0];
+      const needsSpace = !/\s/.test(lastChar) && /^[a-zA-Z0-9]/.test(firstChar);
+      if (needsSpace) {
+        suggestion = ' ' + suggestion;
+      }
+    }
     
     console.log('[TabTab API] Suggestion generated:', suggestion.substring(0, 50));
 
