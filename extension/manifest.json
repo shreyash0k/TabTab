@@ -20,7 +20,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content/discord-extractor.js", "content/content.js"],
+      "js": ["content/discord-extractor.js", "content/linkedin-extractor.js", "content/content.js"],
       "css": ["content/styles.css"],
       "run_at": "document_idle"
     }

@@ -510,6 +510,10 @@
       app = 'discord';
       context = window.TabTabDiscord.extractContext();
       console.log('[TabTab] Discord context extracted:', context.length, 'messages');
+    } else if (window.TabTabLinkedIn && window.TabTabLinkedIn.isLinkedIn()) {
+      app = 'linkedin';
+      context = window.TabTabLinkedIn.extractContext();
+      console.log('[TabTab] LinkedIn context extracted:', context.length, 'messages');
     }
     
     return new Promise((resolve) => {

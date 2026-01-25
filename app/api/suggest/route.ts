@@ -32,9 +32,11 @@ function buildSystemPrompt(app: string | null, context: string[]): string {
 - Be natural and contextually appropriate`;
 
   // If we have app-specific context, include it
-  if (app === 'discord' && context && context.length > 0) {
-    const conversationContext = context.map((msg, i) => `- ${msg}`).join('\n');
-    return `You are a text completion assistant helping someone write a Discord message. Your task is to continue their text naturally based on the conversation context.
+  if (context && context.length > 0) {
+    const conversationContext = context.map((msg) => `- ${msg}`).join('\n');
+    
+    if (app === 'discord') {
+      return `You are a text completion assistant helping someone write a Discord message. Your task is to continue their text naturally based on the conversation context.
 
 Recent conversation:
 ${conversationContext}
@@ -42,6 +44,18 @@ ${conversationContext}
 The user is now typing their response. Continue their text naturally, considering the conversation above.
 
 ${baseRules}`;
+    }
+    
+    if (app === 'linkedin') {
+      return `You are a text completion assistant helping someone write a LinkedIn message. Your task is to continue their text naturally based on the conversation context. Keep the tone professional yet friendly, appropriate for LinkedIn networking.
+
+Recent conversation:
+${conversationContext}
+
+The user is now typing their response. Continue their text naturally, considering the conversation above.
+
+${baseRules}`;
+    }
   }
 
   // Default prompt without context
