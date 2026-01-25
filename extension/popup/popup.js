@@ -3,8 +3,8 @@
 document.addEventListener('DOMContentLoaded', () => {
   const toggle = document.getElementById('enableToggle');
   const statusIndicator = document.getElementById('statusIndicator');
-  const statusDot = statusIndicator.querySelector('.status-dot');
-  const statusText = statusIndicator.querySelector('.status-text');
+  const statusDot = statusIndicator?.querySelector('.status-dot');
+  const statusText = statusIndicator?.querySelector('.status-text');
   
   // App context elements
   const appName = document.getElementById('appName');
@@ -52,14 +52,16 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   function updateStatusDisplay(isEnabled) {
+    if (!statusIndicator) return;
+    
     if (isEnabled) {
       statusIndicator.classList.remove('disabled');
       statusIndicator.classList.add('active');
-      statusText.textContent = 'Active';
+      if (statusText) statusText.textContent = 'Active';
     } else {
       statusIndicator.classList.remove('active');
       statusIndicator.classList.add('disabled');
-      statusText.textContent = 'Disabled';
+      if (statusText) statusText.textContent = 'Disabled';
     }
   }
   
