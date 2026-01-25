@@ -10,10 +10,12 @@
   <div class="container">
     <div class="header">
       <div class="logo">
-        <span class="logo-icon">⌨️</span>
-        <span class="logo-text">TabTab</span>
+        <img src="../icons/icon128.png" alt="TabTab" class="logo-icon">
+        <div class="logo-content">
+          <span class="logo-text">TabTab</span>
+          <p class="tagline">AI Text Autocomplete</p>
+        </div>
       </div>
-      <p class="tagline">AI Text Autocomplete</p>
     </div>
     
     <div class="toggle-section">
@@ -26,10 +28,24 @@
       </label>
     </div>
     
-    <div class="status-section">
-      <div id="statusIndicator" class="status-indicator">
-        <span class="status-dot"></span>
-        <span class="status-text">Active</span>
+    <div class="app-context-section">
+      <div class="app-context-card">
+        <div class="app-row">
+          <span class="app-name" id="appName">No app detected</span>
+          <span class="app-icon" id="appIcon">🌐</span>
+        </div>
+        <div class="tone-row">
+          <span class="tone-label">Tone:</span>
+          <span class="tone-value" id="toneValue">Neutral</span>
+          <button class="edit-btn" id="editToneBtn" title="Edit tone">
+            <span class="edit-icon">✏️</span>
+          </button>
+        </div>
+        <div class="tone-edit-row" id="toneEditRow" style="display: none;">
+          <input type="text" class="tone-input" id="toneInput" placeholder="e.g., Casual, friendly">
+          <button class="save-btn" id="saveToneBtn" title="Save">✓</button>
+          <button class="cancel-btn" id="cancelToneBtn" title="Cancel">✕</button>
+        </div>
       </div>
     </div>
     

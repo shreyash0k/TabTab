@@ -494,6 +494,22 @@
     }
   }
 
+  // Get custom tone from storage
+  function getCustomTone(app) {
+    return new Promise((resolve) => {
+      if (!app || !isExtensionContextValid()) {
+        resolve(null);
+        return;
+      }
+      safeSendMessage(
+        { type: 'GET_CUSTOM_TONE', app },
+        (response) => {
+          resolve(response?.customTone || null);
+        }
+      );
+    });
+  }
+
   // Fetch suggestion from background script
   async function fetchSuggestion(text) {
     if (!isExtensionContextValid()) {
@@ -524,9 +540,15 @@
       console.log('[TabTab] Twitter context extracted:', context.length, 'tweets');
     }
     
+    // Get custom tone for this app
+    const customTone = await getCustomTone(app);
+    if (customTone) {
+      console.log('[TabTab] Using custom tone:', customTone);
+    }
+    
     return new Promise((resolve) => {
       safeSendMessage(
-        { type: 'GET_SUGGESTION', text, context, app },
+        { type: 'GET_SUGGESTION', text, context, app, customTone },
         (response) => {
           console.log('[TabTab] Got response:', response);
           resolve(response?.suggestion || '');

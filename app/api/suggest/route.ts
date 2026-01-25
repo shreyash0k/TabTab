@@ -18,8 +18,16 @@ export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
-// Build system prompt based on app context
-function buildSystemPrompt(app: string | null, context: string[]): string {
+// App display names for prompts
+const APP_NAMES: Record<string, string> = {
+  discord: 'Discord',
+  linkedin: 'LinkedIn',
+  slack: 'Slack',
+  twitter: 'Twitter/X',
+};
+
+// Build system prompt based on app context and custom tone
+function buildSystemPrompt(app: string | null, context: string[], customTone: string | null): string {
   const baseRules = `Rules:
 - Output ONLY the continuation text, nothing else
 - Keep it brief 1-2 sentences or a few words 
@@ -31,45 +39,18 @@ function buildSystemPrompt(app: string | null, context: string[]): string {
 - If the text ends mid-sentence, complete that sentence first
 - Be natural and contextually appropriate`;
 
+  // Build tone instruction
+  const toneInstruction = customTone 
+    ? `Use a ${customTone} tone in your response.`
+    : '';
+
   // If we have app-specific context, include it
   if (context && context.length > 0) {
     const conversationContext = context.map((msg) => `- ${msg}`).join('\n');
-    
-    if (app === 'discord') {
-      return `You are a text completion assistant helping someone write a Discord message. Your task is to continue their text naturally based on the conversation context.
-
-Recent conversation:
-${conversationContext}
-
-The user is now typing their response. Continue their text naturally, considering the conversation above.
-
-${baseRules}`;
-    }
-    
-    if (app === 'linkedin') {
-      return `You are a text completion assistant helping someone write a LinkedIn message. Your task is to continue their text naturally based on the conversation context. Keep the tone professional yet friendly, appropriate for LinkedIn networking.
-
-Recent conversation:
-${conversationContext}
-
-The user is now typing their response. Continue their text naturally, considering the conversation above.
-
-${baseRules}`;
-    }
-    
-    if (app === 'slack') {
-      return `You are a text completion assistant helping someone write a Slack message. Your task is to continue their text naturally based on the conversation context. Match the casual, collaborative tone typical of workplace Slack conversations.
-
-Recent conversation:
-${conversationContext}
-
-The user is now typing their response. Continue their text naturally, considering the conversation above.
-
-${baseRules}`;
-    }
+    const appName = app ? APP_NAMES[app] || app : 'this app';
     
     if (app === 'twitter') {
-      return `You are a text completion assistant helping someone write a Twitter/X reply or comment. Your task is to continue their text naturally based on the tweet(s) they're replying to. Keep it concise and engaging, appropriate for Twitter's format.
+      return `You are a text completion assistant helping someone write a ${appName} reply or comment. Your task is to continue their text naturally based on the tweet(s) they're replying to.${customTone ? ` ${toneInstruction}` : ' Keep it concise and engaging, appropriate for Twitter\'s format.'}
 
 Tweet(s) being replied to:
 ${conversationContext}
@@ -78,19 +59,29 @@ The user is now typing their reply. Continue their text naturally, considering t
 
 ${baseRules}`;
     }
+    
+    // Generic app with context (Discord, LinkedIn, Slack, etc.)
+    return `You are a text completion assistant helping someone write a ${appName} message. Your task is to continue their text naturally based on the conversation context.${customTone ? ` ${toneInstruction}` : ''}
+
+Recent conversation:
+${conversationContext}
+
+The user is now typing their response. Continue their text naturally, considering the conversation above.
+
+${baseRules}`;
   }
 
   // Default prompt without context
-  return `You are a text completion assistant. Your task is to continue the user's text naturally.
+  return `You are a text completion assistant. Your task is to continue the user's text naturally.${customTone ? ` ${toneInstruction}` : ''}
 
 ${baseRules}`;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { text, context = [], app = null } = await request.json();
+    const { text, context = [], app = null, customTone = null } = await request.json();
     
-    console.log('[TabTab API] Received request, text length:', text?.length, 'context:', context?.length, 'app:', app);
+    console.log('[TabTab API] Received request, text length:', text?.length, 'context:', context?.length, 'app:', app, 'customTone:', customTone);
 
     if (!text || typeof text !== 'string') {
       return NextResponse.json(
@@ -104,7 +95,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ suggestion: '' }, { headers: corsHeaders });
     }
 
-    const systemPrompt = buildSystemPrompt(app, context);
+    const systemPrompt = buildSystemPrompt(app, context, customTone);
 
     const completion = await groq.chat.completions.create({
       model: 'llama-3.3-70b-versatile',

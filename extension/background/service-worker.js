@@ -6,7 +6,7 @@ const API_URL = 'http://localhost:3000/api/suggest';
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'GET_SUGGESTION') {
-    handleGetSuggestion(message.text, message.context, message.app)
+    handleGetSuggestion(message.text, message.context, message.app, message.customTone)
       .then(sendResponse)
       .catch((error) => {
         console.error('Error getting suggestion:', error);
@@ -29,10 +29,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
+  
+  if (message.type === 'GET_CUSTOM_TONE') {
+    chrome.storage.sync.get(['customTones'], (result) => {
+      const customTones = result.customTones || {};
+      const tone = customTones[message.app] || null;
+      sendResponse({ customTone: tone });
+    });
+    return true;
+  }
 });
 
-async function handleGetSuggestion(text, context = [], app = null) {
-  console.log('[TabTab SW] handleGetSuggestion called, text length:', text?.length, 'context:', context?.length, 'app:', app);
+async function handleGetSuggestion(text, context = [], app = null, customTone = null) {
+  console.log('[TabTab SW] handleGetSuggestion called, text length:', text?.length, 'context:', context?.length, 'app:', app, 'customTone:', customTone);
   
   // Don't fetch for short text
   if (!text || text.length < 10) {
@@ -47,7 +56,7 @@ async function handleGetSuggestion(text, context = [], app = null) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ text, context, app }),
+      body: JSON.stringify({ text, context, app, customTone }),
     });
 
     console.log('[TabTab SW] Response status:', response.status);
