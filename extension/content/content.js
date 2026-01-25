@@ -514,6 +514,10 @@
       app = 'linkedin';
       context = window.TabTabLinkedIn.extractContext();
       console.log('[TabTab] LinkedIn context extracted:', context.length, 'messages');
+    } else if (window.TabTabSlack && window.TabTabSlack.isSlack()) {
+      app = 'slack';
+      context = window.TabTabSlack.extractContext();
+      console.log('[TabTab] Slack context extracted:', context.length, 'messages');
     }
     
     return new Promise((resolve) => {

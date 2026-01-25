@@ -56,6 +56,17 @@ The user is now typing their response. Continue their text naturally, considerin
 
 ${baseRules}`;
     }
+    
+    if (app === 'slack') {
+      return `You are a text completion assistant helping someone write a Slack message. Your task is to continue their text naturally based on the conversation context. Match the casual, collaborative tone typical of workplace Slack conversations.
+
+Recent conversation:
+${conversationContext}
+
+The user is now typing their response. Continue their text naturally, considering the conversation above.
+
+${baseRules}`;
+    }
   }
 
   // Default prompt without context
