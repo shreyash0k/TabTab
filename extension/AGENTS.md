@@ -50,8 +50,12 @@ Key functions:
 - `showPopup(inputEl, suggestion)` - Positions popup above input
 - `handleInput(e)` - Debounced input handler
 - `handleKeyDown(e)` - Tab/Escape key handling
-- `insertTextAtCursor(el, text, inputType)` - Inserts accepted suggestion
+- `insertTextAtCursor(el, text, inputType)` - Inserts accepted suggestion (uses execCommand for rich editors)
 - `attachListeners(input)` - Attaches event listeners to inputs
+- `handleContentEditableChange(el)` - MutationObserver handler for rich text editors
+- `tryExecCommand(el, text)` - Attempts execCommand insertion for better editor compatibility
+- `isCursorAtEnd(el, inputType)` - Multi-method cursor position detection for complex DOM structures
+- `dispatchInputEvents(el, text)` - Dispatches multiple event types for different editor frameworks
 
 ### popup/
 Simple UI with:
@@ -91,8 +95,32 @@ Tab → insert text | Escape → dismiss
 | `<input type="email">` | ✅ Full |
 | `<input type="url">` | ✅ Full |
 | `contenteditable` | ✅ Full |
+| Rich text editors | ✅ Full |
 | Password fields | ❌ Excluded |
 | Read-only fields | ❌ Excluded |
+
+### Rich Text Editor Support
+
+The extension includes enhanced support for complex contenteditable elements used by modern web apps:
+
+| Platform/Editor | Support |
+|-----------------|---------|
+| LinkedIn Messages | ✅ |
+| Discord | ✅ |
+| Slack | ✅ |
+| Quill Editor | ✅ |
+| ProseMirror | ✅ |
+| Draft.js | ✅ |
+| Slate.js | ✅ |
+| Tiptap | ✅ |
+
+Detection methods:
+- `role="textbox"` attribute
+- `aria-multiline="true"` attribute
+- `aria-label` containing "message", "write", "compose", etc.
+- Common editor class patterns (msg-form, editor, compose, etc.)
+- MutationObserver for DOM-based text changes
+- Multiple event listeners (input, keyup, mutations)
 
 ## Configuration
 
@@ -130,5 +158,6 @@ node generate-icons.js
 ## Known Limitations
 
 - Requires hosted API server running
-- Some sites with Shadow DOM may not work
+- Some sites with Shadow DOM may not work (e.g., Notion)
 - Suggestion only triggers when cursor is at end of text
+- Some highly custom editors may need additional integration
