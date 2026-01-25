@@ -501,9 +501,20 @@
     }
     
     console.log('[TabTab] Fetching suggestion for text length:', text.length);
+    
+    // Extract app-specific context if available
+    let context = [];
+    let app = null;
+    
+    if (window.TabTabDiscord && window.TabTabDiscord.isDiscord()) {
+      app = 'discord';
+      context = window.TabTabDiscord.extractContext();
+      console.log('[TabTab] Discord context extracted:', context.length, 'messages');
+    }
+    
     return new Promise((resolve) => {
       safeSendMessage(
-        { type: 'GET_SUGGESTION', text },
+        { type: 'GET_SUGGESTION', text, context, app },
         (response) => {
           console.log('[TabTab] Got response:', response);
           resolve(response?.suggestion || '');

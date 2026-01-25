@@ -18,11 +18,43 @@ export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
+// Build system prompt based on app context
+function buildSystemPrompt(app: string | null, context: string[]): string {
+  const baseRules = `Rules:
+- Output ONLY the continuation text, nothing else
+- Keep it brief 1-2 sentences or a few words 
+- If the input does not end with a space and your continuation starts with a new word, begin your output with a space
+- Use correct punctuation and capitalization
+- Match the style and tone of the existing text
+- Do not repeat any part of the input text
+- Do not add explanations or meta-commentary
+- If the text ends mid-sentence, complete that sentence first
+- Be natural and contextually appropriate`;
+
+  // If we have app-specific context, include it
+  if (app === 'discord' && context && context.length > 0) {
+    const conversationContext = context.map((msg, i) => `- ${msg}`).join('\n');
+    return `You are a text completion assistant helping someone write a Discord message. Your task is to continue their text naturally based on the conversation context.
+
+Recent conversation:
+${conversationContext}
+
+The user is now typing their response. Continue their text naturally, considering the conversation above.
+
+${baseRules}`;
+  }
+
+  // Default prompt without context
+  return `You are a text completion assistant. Your task is to continue the user's text naturally.
+
+${baseRules}`;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { text } = await request.json();
+    const { text, context = [], app = null } = await request.json();
     
-    console.log('[TabTab API] Received request, text length:', text?.length);
+    console.log('[TabTab API] Received request, text length:', text?.length, 'context:', context?.length, 'app:', app);
 
     if (!text || typeof text !== 'string') {
       return NextResponse.json(
@@ -36,22 +68,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ suggestion: '' }, { headers: corsHeaders });
     }
 
+    const systemPrompt = buildSystemPrompt(app, context);
+
     const completion = await groq.chat.completions.create({
       model: 'llama-3.3-70b-versatile',
       messages: [
         {
           role: 'system',
-          content: `You are a text completion assistant. Your task is to continue the user's text naturally.
-Rules:
-- Output ONLY the continuation text, nothing else
-- Keep it brief
-- If the input does not end with a space and your continuation starts with a new word, begin your output with a space
-- Use correct punctuation and capitalization
-- Match the style and tone of the existing text
-- Do not repeat any part of the input text
-- Do not add explanations or meta-commentary
-- If the text ends mid-sentence, complete that sentence first
-- Be natural and contextually appropriate`,
+          content: systemPrompt,
         },
         {
           role: 'user',

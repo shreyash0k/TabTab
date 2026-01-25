@@ -6,7 +6,7 @@ const API_URL = 'http://localhost:3000/api/suggest';
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'GET_SUGGESTION') {
-    handleGetSuggestion(message.text)
+    handleGetSuggestion(message.text, message.context, message.app)
       .then(sendResponse)
       .catch((error) => {
         console.error('Error getting suggestion:', error);
@@ -31,8 +31,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-async function handleGetSuggestion(text) {
-  console.log('[TabTab SW] handleGetSuggestion called, text length:', text?.length);
+async function handleGetSuggestion(text, context = [], app = null) {
+  console.log('[TabTab SW] handleGetSuggestion called, text length:', text?.length, 'context:', context?.length, 'app:', app);
   
   // Don't fetch for short text
   if (!text || text.length < 10) {
@@ -47,7 +47,7 @@ async function handleGetSuggestion(text) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, context, app }),
     });
 
     console.log('[TabTab SW] Response status:', response.status);
