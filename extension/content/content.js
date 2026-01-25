@@ -6,6 +6,8 @@
 
   const DEBOUNCE_MS = 300;
   const MIN_TEXT_LENGTH = 10;
+  const MUTATION_THROTTLE_MS = 500; // Throttle mutation observer processing
+  const PERIODIC_SCAN_MS = 10000; // Reduced frequency: 10 seconds instead of 2
 
   let currentInput = null;
   let currentInputType = null; // 'standard' or 'contenteditable'
@@ -14,6 +16,9 @@
   let debounceTimer = null;
   let isEnabled = true;
   let isExtensionValid = true;
+  let mutationThrottleTimer = null;
+  let pendingMutations = false;
+  let processedElements = new WeakSet(); // Track elements we've already checked
 
   // Check if extension context is still valid
   function isExtensionContextValid() {
@@ -721,33 +726,65 @@
       
       // Some editors use custom events or MutationObserver-based detection
       // We'll use a subtree observer to catch any text changes
-      const textObserver = new MutationObserver((mutations) => {
-        // Check if extension is still valid
-        if (!isExtensionContextValid()) {
-          textObserver.disconnect();
-          return;
-        }
+      // But only start observing when the element is focused (performance optimization)
+      let textObserver = null;
+      let observerDebounceTimer = null;
+      
+      const startObserving = () => {
+        if (textObserver || !isExtensionContextValid()) return;
         
-        // Debounce the mutation handling
-        if (debounceTimer) {
-          clearTimeout(debounceTimer);
-        }
-        debounceTimer = setTimeout(() => {
-          if (!isExtensionContextValid()) return;
-          if (document.activeElement === input || input.contains(document.activeElement)) {
-            handleContentEditableChange(input);
+        textObserver = new MutationObserver((mutations) => {
+          // Check if extension is still valid
+          if (!isExtensionContextValid()) {
+            textObserver.disconnect();
+            textObserver = null;
+            return;
           }
-        }, DEBOUNCE_MS);
+          
+          // Debounce the mutation handling
+          if (observerDebounceTimer) {
+            clearTimeout(observerDebounceTimer);
+          }
+          observerDebounceTimer = setTimeout(() => {
+            if (!isExtensionContextValid()) return;
+            if (document.activeElement === input || input.contains(document.activeElement)) {
+              handleContentEditableChange(input);
+            }
+          }, DEBOUNCE_MS);
+        });
+        
+        textObserver.observe(input, {
+          childList: true,
+          subtree: true,
+          characterData: true
+        });
+      };
+      
+      const stopObserving = () => {
+        if (textObserver) {
+          textObserver.disconnect();
+          textObserver = null;
+        }
+        if (observerDebounceTimer) {
+          clearTimeout(observerDebounceTimer);
+          observerDebounceTimer = null;
+        }
+      };
+      
+      // Only observe when focused (huge performance improvement)
+      input.addEventListener('focus', startObserving);
+      input.addEventListener('blur', () => {
+        // Delay stopping to allow blur handling to complete
+        setTimeout(stopObserving, 200);
       });
       
-      textObserver.observe(input, {
-        childList: true,
-        subtree: true,
-        characterData: true
-      });
+      // If already focused, start observing
+      if (document.activeElement === input || input.contains(document.activeElement)) {
+        startObserving();
+      }
       
-      // Store observer reference for cleanup
-      input._tabtabObserver = textObserver;
+      // Store cleanup function for potential future use
+      input._tabtabCleanup = stopObserving;
     }
     
     input.dataset.tabtabAttached = 'true';
@@ -810,71 +847,43 @@
   }
 
   // Find and attach to contenteditable elements
+  // Optimized: Single query with combined selectors, no expensive generic element scan
   function findContentEditables(root = document) {
-    // Standard contenteditable query
-    const editables = root.querySelectorAll('[contenteditable="true"]');
-    editables.forEach((el) => {
-      if (isValidContentEditable(el)) {
-        attachListeners(el);
-      }
-    });
+    // Combined selector for all contenteditable-related elements
+    // This is much more efficient than multiple separate queries
+    const combinedSelector = [
+      '[contenteditable="true"]',
+      '[role="textbox"]',
+      '[aria-multiline="true"]',
+      '.ql-editor',
+      '.ProseMirror',
+      '.DraftEditor-root',
+      '[data-slate-editor]',
+      '.tiptap'
+    ].join(', ');
     
-    // Also check elements with role="textbox" (common in rich editors)
-    const textboxes = root.querySelectorAll('[role="textbox"]');
-    textboxes.forEach((el) => {
-      if (isContentEditable(el) && isValidContentEditable(el)) {
-        attachListeners(el);
-      }
-    });
-    
-    // Check for elements with aria-multiline (another pattern used by rich editors)
-    const multilines = root.querySelectorAll('[aria-multiline="true"]');
-    multilines.forEach((el) => {
-      if (isContentEditable(el) && isValidContentEditable(el)) {
-        attachListeners(el);
-      }
-    });
-    
-    // Check common rich text editor class patterns
-    const richEditorSelectors = [
-      '.ql-editor', // Quill
-      '.ProseMirror', // ProseMirror
-      '.DraftEditor-root', // Draft.js
-      '[data-slate-editor]', // Slate.js
-      '.tiptap', // Tiptap
-      '[class*="msg-form"]', // LinkedIn
-      '[class*="editor"]', // Generic
-      '[class*="compose"]', // Email clients
-      '[class*="message-input"]', // Chat apps
-      '[class*="markup"]', // Discord
-    ];
-    
-    richEditorSelectors.forEach((selector) => {
-      try {
-        const elements = root.querySelectorAll(selector);
-        elements.forEach((el) => {
-          if (isContentEditable(el) && isValidContentEditable(el)) {
-            attachListeners(el);
-          }
-        });
-      } catch (e) {
-        // Invalid selector, skip
-      }
-    });
-    
-    // Generic div, p, span check for any remaining contenteditables
-    const allElements = root.querySelectorAll('div, p, span, section, article');
-    allElements.forEach((el) => {
-      if (isValidContentEditable(el)) {
-        attachListeners(el);
-      }
-    });
+    try {
+      const elements = root.querySelectorAll(combinedSelector);
+      elements.forEach((el) => {
+        // Skip if already processed (avoid redundant work)
+        if (processedElements.has(el)) return;
+        processedElements.add(el);
+        
+        if (isContentEditable(el) && isValidContentEditable(el)) {
+          attachListeners(el);
+        }
+      });
+    } catch (e) {
+      console.log('[TabTab] Error querying contenteditables:', e);
+    }
   }
 
   // Initialize
   function initialize() {
     const inputs = document.querySelectorAll('input, textarea');
     inputs.forEach((input) => {
+      if (processedElements.has(input)) return;
+      processedElements.add(input);
       if (isValidStandardInput(input)) {
         attachListeners(input);
       }
@@ -885,7 +894,28 @@
     console.log('[TabTab] Content script initialized (popup mode)');
   }
 
-  // Watch for dynamically added inputs
+  // Process mutations in a throttled manner
+  function processPendingMutations() {
+    if (!isExtensionContextValid()) return;
+    
+    pendingMutations = false;
+    mutationThrottleTimer = null;
+    
+    // Instead of processing each mutation individually,
+    // just scan for new inputs in the document (more efficient)
+    const inputs = document.querySelectorAll('input, textarea');
+    inputs.forEach((input) => {
+      if (processedElements.has(input)) return;
+      processedElements.add(input);
+      if (isValidStandardInput(input)) {
+        attachListeners(input);
+      }
+    });
+    
+    findContentEditables();
+  }
+
+  // Watch for dynamically added inputs with throttling
   const observer = new MutationObserver((mutations) => {
     // Check if extension is still valid
     if (!isExtensionContextValid()) {
@@ -893,56 +923,74 @@
       return;
     }
     
-    mutations.forEach((mutation) => {
-      mutation.addedNodes.forEach((node) => {
-        if (node.nodeType === Node.ELEMENT_NODE) {
-          if (isValidStandardInput(node)) {
-            attachListeners(node);
-          }
-          if (isValidContentEditable(node)) {
-            attachListeners(node);
-          }
-          
-          const inputs = node.querySelectorAll?.('input, textarea');
-          inputs?.forEach((input) => {
-            if (isValidStandardInput(input)) {
-              attachListeners(input);
-            }
-          });
-          
-          findContentEditables(node);
-        }
-      });
-      
+    // Quick check: only process if there might be new inputs
+    let hasRelevantChanges = false;
+    for (const mutation of mutations) {
       if (mutation.type === 'attributes' && mutation.attributeName === 'contenteditable') {
-        const el = mutation.target;
-        if (isValidContentEditable(el)) {
-          attachListeners(el);
+        hasRelevantChanges = true;
+        break;
+      }
+      if (mutation.addedNodes.length > 0) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            // Quick heuristic: check if this might contain inputs
+            if (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA' ||
+                node.hasAttribute?.('contenteditable') ||
+                node.querySelector?.('input, textarea, [contenteditable]')) {
+              hasRelevantChanges = true;
+              break;
+            }
+          }
         }
       }
-    });
+      if (hasRelevantChanges) break;
+    }
+    
+    if (!hasRelevantChanges) return;
+    
+    // Throttle mutation processing to avoid overwhelming the browser
+    pendingMutations = true;
+    if (!mutationThrottleTimer) {
+      mutationThrottleTimer = setTimeout(processPendingMutations, MUTATION_THROTTLE_MS);
+    }
   });
 
+  // Only observe childList changes, not every attribute change
   observer.observe(document.body, {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['contenteditable']
+    attributeFilter: ['contenteditable'] // Only watch contenteditable attribute
   });
 
-  // Periodic check for new contenteditables
+  // Periodic check for new contenteditables (reduced frequency)
   const periodicCheckInterval = setInterval(() => {
     // Stop interval if extension is invalidated
     if (!isExtensionContextValid()) {
       clearInterval(periodicCheckInterval);
       return;
     }
-    findContentEditables();
-  }, 2000);
+    // Only scan if user is actively focused on the page
+    if (document.hasFocus()) {
+      findContentEditables();
+    }
+  }, PERIODIC_SCAN_MS);
+
+  // Use requestIdleCallback to defer initialization and not block page load
+  function deferredInit() {
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(() => {
+        initialize();
+      }, { timeout: 2000 }); // Max 2 second delay
+    } else {
+      // Fallback for browsers without requestIdleCallback
+      setTimeout(initialize, 100);
+    }
+  }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initialize);
+    document.addEventListener('DOMContentLoaded', deferredInit);
   } else {
-    initialize();
+    deferredInit();
   }
 })();
