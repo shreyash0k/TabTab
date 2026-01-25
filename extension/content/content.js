@@ -518,6 +518,10 @@
       app = 'slack';
       context = window.TabTabSlack.extractContext();
       console.log('[TabTab] Slack context extracted:', context.length, 'messages');
+    } else if (window.TabTabTwitter && window.TabTabTwitter.isTwitter()) {
+      app = 'twitter';
+      context = window.TabTabTwitter.extractContext();
+      console.log('[TabTab] Twitter context extracted:', context.length, 'tweets');
     }
     
     return new Promise((resolve) => {

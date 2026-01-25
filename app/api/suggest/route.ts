@@ -67,6 +67,17 @@ The user is now typing their response. Continue their text naturally, considerin
 
 ${baseRules}`;
     }
+    
+    if (app === 'twitter') {
+      return `You are a text completion assistant helping someone write a Twitter/X reply or comment. Your task is to continue their text naturally based on the tweet(s) they're replying to. Keep it concise and engaging, appropriate for Twitter's format.
+
+Tweet(s) being replied to:
+${conversationContext}
+
+The user is now typing their reply. Continue their text naturally, considering the tweet context above.
+
+${baseRules}`;
+    }
   }
 
   // Default prompt without context
