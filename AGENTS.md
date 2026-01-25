@@ -9,7 +9,7 @@ TabTab is a GitHub Copilot-style text autocomplete web app. It shows inline ghos
 - Next.js 14 (App Router)
 - React 18 with TypeScript
 - Tailwind CSS
-- Groq API with Llama 3.1 8B for suggestions
+- Groq API with Llama 3.3 70B for suggestions
 
 ## Commands
 
@@ -55,7 +55,7 @@ Uses dual-layer technique: transparent textarea over a mirror div that renders s
 3. Tab accepts (inserts at cursor), Escape dismisses, typing clears
 
 ### API Configuration
-- Model: `llama-3.1-8b-instant`
+- Model: `llama-3.3-70b-versatile`
 - Max tokens: 50
 - Minimum input: 10 characters
 
