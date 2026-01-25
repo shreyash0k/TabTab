@@ -6,20 +6,34 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+// CORS headers for Chrome extension
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+// Handle CORS preflight requests
+export async function OPTIONS() {
+  return NextResponse.json({}, { headers: corsHeaders });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { text } = await request.json();
+    
+    console.log('[TabTab API] Received request, text length:', text?.length);
 
     if (!text || typeof text !== 'string') {
       return NextResponse.json(
         { error: 'Text is required' },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
     // Skip if text is too short
     if (text.length < 10) {
-      return NextResponse.json({ suggestion: '' });
+      return NextResponse.json({ suggestion: '' }, { headers: corsHeaders });
     }
 
     const completion = await groq.chat.completions.create({
@@ -48,12 +62,14 @@ Rules:
     });
 
     const suggestion = completion.choices[0]?.message?.content?.trim() || '';
+    
+    console.log('[TabTab API] Suggestion generated:', suggestion.substring(0, 50));
 
-    return NextResponse.json({ suggestion });
+    return NextResponse.json({ suggestion }, { headers: corsHeaders });
   } catch (error) {
     console.error('Error generating suggestion:', error);
     
     // Return empty suggestion on error to avoid breaking the UI
-    return NextResponse.json({ suggestion: '' });
+    return NextResponse.json({ suggestion: '' }, { headers: corsHeaders });
   }
 }

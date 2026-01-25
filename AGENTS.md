@@ -65,3 +65,27 @@ Uses dual-layer technique: transparent textarea over a mirror div that renders s
 - TypeScript strict mode
 - Tailwind for styling
 - Client components marked with `'use client'`
+
+## Chrome Extension
+
+The `extension/` folder contains a Chrome extension (Manifest V3) that provides TabTab autocomplete for any text field on any website.
+
+### Extension Structure
+```
+extension/
+├── manifest.json           # Chrome MV3 manifest
+├── background/
+│   └── service-worker.js   # API calls to hosted backend
+├── content/
+│   ├── content.js          # Text field detection, ghost text overlay
+│   └── styles.css          # Ghost text styling
+├── popup/
+│   ├── popup.html/js/css   # Enable/disable toggle UI
+└── icons/                  # Extension icons
+```
+
+### Loading the Extension
+1. Run `npm run dev` to start the API server
+2. Go to `chrome://extensions/`
+3. Enable "Developer mode"
+4. Click "Load unpacked" and select the `extension/` folder

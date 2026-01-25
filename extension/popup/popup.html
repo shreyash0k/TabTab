@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TabTab</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">
+        <span class="logo-icon">⌨️</span>
+        <span class="logo-text">TabTab</span>
+      </div>
+      <p class="tagline">AI Text Autocomplete</p>
+    </div>
+    
+    <div class="toggle-section">
+      <label class="toggle-label">
+        <span class="label-text">Enable autocomplete</span>
+        <div class="toggle-wrapper">
+          <input type="checkbox" id="enableToggle" class="toggle-input">
+          <span class="toggle-slider"></span>
+        </div>
+      </label>
+    </div>
+    
+    <div class="status-section">
+      <div id="statusIndicator" class="status-indicator">
+        <span class="status-dot"></span>
+        <span class="status-text">Active</span>
+      </div>
+    </div>
+    
+    <div class="instructions">
+      <p><strong>How to use:</strong></p>
+      <ul>
+        <li>Type in any text field (10+ chars)</li>
+        <li>Wait for gray suggestion text</li>
+        <li>Press <kbd>Tab</kbd> to accept</li>
+        <li>Press <kbd>Esc</kbd> to dismiss</li>
+      </ul>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

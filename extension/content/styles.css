@@ -1,0 +1,15 @@
+/* TabTab Suggestion Popup Styles */
+/* Note: Main styles are injected via JS for better encapsulation */
+
+/* Ensure popup is always on top */
+#tabtab-suggestion-popup {
+  z-index: 2147483647 !important;
+}
+
+/* Prevent any site styles from affecting our popup */
+#tabtab-suggestion-popup,
+#tabtab-suggestion-popup * {
+  box-sizing: border-box !important;
+  text-transform: none !important;
+  text-decoration: none !important;
+}

@@ -127,6 +127,7 @@ export function AutocompleteTextarea({
         onSelect={handleSelect}
         onClick={handleSelect}
         placeholder={placeholder}
+        data-tabtab-native="true"
         className={`
           ${sharedStyles}
           relative
