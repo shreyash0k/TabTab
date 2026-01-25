@@ -77,15 +77,23 @@ extension/
 ├── background/
 │   └── service-worker.js   # API calls to hosted backend
 ├── content/
-│   ├── content.js          # Text field detection, ghost text overlay
-│   └── styles.css          # Ghost text styling
+│   ├── content.js          # Text field detection, popup suggestions
+│   └── styles.css          # Popup styling overrides
 ├── popup/
 │   ├── popup.html/js/css   # Enable/disable toggle UI
-└── icons/                  # Extension icons
+└── icons/                  # Extension icons (16/48/128px)
 ```
+
+### How It Works
+1. Content script detects `<textarea>`, `<input>`, and `contenteditable` elements
+2. On typing (300ms debounce), sends text to hosted API via service worker
+3. Displays suggestion in a popup above the input field
+4. Tab accepts suggestion, Escape dismisses
 
 ### Loading the Extension
 1. Run `npm run dev` to start the API server
 2. Go to `chrome://extensions/`
 3. Enable "Developer mode"
 4. Click "Load unpacked" and select the `extension/` folder
+
+See `extension/AGENTS.md` for detailed extension documentation.
