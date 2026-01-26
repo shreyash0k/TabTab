@@ -16,6 +16,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const saveToneBtn = document.getElementById('saveToneBtn');
   const cancelToneBtn = document.getElementById('cancelToneBtn');
   
+  // Sync elements
+  const syncBadge = document.getElementById('syncBadge');
+  const syncIcon = document.getElementById('syncIcon');
+  const syncText = document.getElementById('syncText');
+  
   // App configuration
   const APP_CONFIG = {
     discord: { name: 'Discord', icon: '🎮', defaultTone: 'Casual, friendly' },
@@ -40,6 +45,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Detect current app
     detectCurrentApp();
+    
+    // Initial sync to cloud
+    syncToCloud();
   });
 
   // Handle toggle change
@@ -48,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     chrome.storage.sync.set({ enabled: isEnabled }, () => {
       updateStatusDisplay(isEnabled);
+      syncToCloud();
     });
   });
 
@@ -135,6 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
       chrome.storage.sync.set({ customTones }, () => {
         toneValue.textContent = newTone;
         cancelEdit();
+        syncToCloud();
       });
     } else {
       cancelEdit();
@@ -144,5 +154,49 @@ document.addEventListener('DOMContentLoaded', () => {
   function cancelEdit() {
     toneEditRow.style.display = 'none';
     editToneBtn.style.display = 'inline-flex';
+  }
+  
+  // ==================== Cloud Sync Functions ====================
+  
+  function updateSyncBadge(status, message) {
+    if (!syncBadge) return;
+    
+    syncBadge.classList.remove('syncing', 'error');
+    
+    switch (status) {
+      case 'syncing':
+        syncBadge.classList.add('syncing');
+        syncIcon.textContent = '🔄';
+        syncText.textContent = 'Syncing...';
+        break;
+      case 'synced':
+        syncIcon.textContent = '☁️';
+        syncText.textContent = 'Synced';
+        break;
+      case 'error':
+        syncBadge.classList.add('error');
+        syncIcon.textContent = '⚠️';
+        syncText.textContent = message || 'Sync error';
+        break;
+    }
+  }
+  
+  function syncToCloud() {
+    updateSyncBadge('syncing');
+    
+    chrome.runtime.sendMessage({ type: 'SUPABASE_SYNC' }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('Sync error:', chrome.runtime.lastError);
+        updateSyncBadge('error', 'Offline');
+        return;
+      }
+      
+      if (response && response.error) {
+        console.error('Sync error:', response.error);
+        updateSyncBadge('error', 'Failed');
+      } else {
+        updateSyncBadge('synced');
+      }
+    });
   }
 });

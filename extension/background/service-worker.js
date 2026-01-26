@@ -1,5 +1,8 @@
 // TabTab Background Service Worker
-// Handles API calls to the hosted backend
+// Handles API calls to the hosted backend and Supabase sync
+
+importScripts('../config.js');
+importScripts('../lib/supabase.js');
 
 const API_URL = 'http://localhost:3000/api/suggest';
 
@@ -38,6 +41,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
+  
+  // Supabase sync handlers
+  if (message.type === 'SUPABASE_GET_PREFERENCES') {
+    SupabaseClient.getPreferences()
+      .then(sendResponse)
+      .catch((error) => {
+        console.error('[TabTab SW] Get preferences error:', error);
+        sendResponse({ preferences: null, error: error.message });
+      });
+    return true;
+  }
+  
+  if (message.type === 'SUPABASE_SAVE_PREFERENCES') {
+    SupabaseClient.savePreferences(message.preferences)
+      .then(sendResponse)
+      .catch((error) => {
+        console.error('[TabTab SW] Save preferences error:', error);
+        sendResponse({ error: error.message });
+      });
+    return true;
+  }
+  
+  if (message.type === 'SUPABASE_SYNC') {
+    // Sync local preferences to Supabase
+    syncToSupabase()
+      .then(sendResponse)
+      .catch((error) => {
+        console.error('[TabTab SW] Sync error:', error);
+        sendResponse({ error: error.message });
+      });
+    return true;
+  }
 });
 
 async function handleGetSuggestion(text, context = [], app = null, customTone = null) {
@@ -73,6 +108,31 @@ async function handleGetSuggestion(text, context = [], app = null, customTone = 
     return { suggestion: '', error: error.message };
   }
 }
+
+// Sync local preferences to Supabase
+async function syncToSupabase() {
+  // Get local preferences
+  const localPrefs = await new Promise((resolve) => {
+    chrome.storage.sync.get(['enabled', 'customTones'], resolve);
+  });
+  
+  // Save to Supabase
+  const result = await SupabaseClient.savePreferences({
+    enabled: localPrefs.enabled !== false,
+    custom_tones: localPrefs.customTones || {}
+  });
+  
+  return result;
+}
+
+// Auto-sync when extension starts
+SupabaseClient.ensureSignedIn().then(({ user, error }) => {
+  if (user) {
+    console.log('[TabTab SW] Signed in as:', user.id);
+  } else if (error) {
+    console.error('[TabTab SW] Auth error:', error);
+  }
+});
 
 // Log when service worker starts
 console.log('TabTab service worker initialized');
