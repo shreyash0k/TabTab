@@ -106,17 +106,34 @@
     popupElement.id = 'tabtab-suggestion-popup';
     popupElement.setAttribute('aria-hidden', 'true');
     
+    // Get extension icon URL
+    const iconUrl = chrome.runtime.getURL('icons/icon16.png');
+    
     // Create inner structure
     popupElement.innerHTML = `
       <div class="tabtab-popup-header">
-        <span class="tabtab-popup-icon">⌨️</span>
+        <img class="tabtab-popup-icon" src="${iconUrl}" alt="TabTab" />
         <span class="tabtab-popup-title">TabTab Suggestion</span>
-        <span class="tabtab-popup-hint">Tab ↹ to accept</span>
+        <button class="tabtab-popup-hint" id="tabtab-accept-btn">Tab to accept</button>
       </div>
       <div class="tabtab-popup-content"></div>
     `;
     
     document.body.appendChild(popupElement);
+    
+    // Add click handler for the accept button
+    const acceptBtn = popupElement.querySelector('#tabtab-accept-btn');
+    acceptBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (currentSuggestion && currentInput) {
+        insertTextAtCursor(currentInput, currentSuggestion, currentInputType);
+        currentSuggestion = '';
+        hidePopup();
+        // Refocus the input
+        currentInput.focus();
+      }
+    });
     
     // Add styles
     const style = document.createElement('style');
@@ -154,7 +171,9 @@
       }
       
       .tabtab-popup-icon {
-        font-size: 16px;
+        width: 16px;
+        height: 16px;
+        object-fit: contain;
       }
       
       .tabtab-popup-title {
@@ -171,6 +190,20 @@
         font-size: 11px;
         font-weight: 500;
         color: #ffffff;
+        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+        border: none;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      
+      .tabtab-popup-hint:hover {
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
+        transform: translateY(-1px);
+      }
+      
+      .tabtab-popup-hint:active {
+        transform: translateY(0);
         box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
       }
       
