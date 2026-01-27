@@ -37,7 +37,8 @@ function buildSystemPrompt(app: string | null, context: string[], customTone: st
 - Do not repeat any part of the input text
 - Do not add explanations or meta-commentary
 - If the text ends mid-sentence, complete that sentence first
-- Be natural and contextually appropriate`;
+- Be natural and contextually appropriate
+- IMPORTANT: If the user has written a question, do NOT answer it - they are asking someone else. Instead, suggest a follow-up thought or leave it as-is.`;
 
   // Build tone instruction
   const toneInstruction = customTone 
