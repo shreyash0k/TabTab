@@ -73,22 +73,43 @@ The `extension/` folder contains a Chrome extension (Manifest V3) that provides 
 ### Extension Structure
 ```
 extension/
-├── manifest.json           # Chrome MV3 manifest
+├── manifest.json              # Chrome MV3 manifest
+├── config.js                  # Supabase configuration
 ├── background/
-│   └── service-worker.js   # API calls to hosted backend
+│   └── service-worker.js      # API calls, Supabase sync
 ├── content/
-│   ├── content.js          # Text field detection, popup suggestions
-│   └── styles.css          # Popup styling overrides
+│   ├── content.js             # Text field detection, popup suggestions
+│   ├── styles.css             # Popup styling overrides
+│   ├── discord-extractor.js   # Discord context extraction
+│   ├── linkedin-extractor.js  # LinkedIn context extraction
+│   ├── slack-extractor.js     # Slack context extraction
+│   └── twitter-extractor.js   # Twitter/X context extraction
+├── lib/
+│   └── supabase.js            # Supabase client for cloud sync
 ├── popup/
-│   ├── popup.html/js/css   # Enable/disable toggle UI
-└── icons/                  # Extension icons (16/48/128px)
+│   ├── popup.html/js/css      # Toggle UI, app context, tone settings
+└── icons/                     # Extension icons (16/48/128px)
 ```
 
 ### How It Works
 1. Content script detects `<textarea>`, `<input>`, and `contenteditable` elements
-2. On typing (300ms debounce), sends text to hosted API via service worker
-3. Displays suggestion in a popup above the input field
-4. Tab accepts suggestion, Escape dismisses
+2. Site-specific extractors detect Discord/LinkedIn/Slack/Twitter and extract conversation context
+3. On typing (300ms debounce), sends text + context to hosted API via service worker
+4. Displays suggestion in a popup above the input field
+5. Tab accepts suggestion, Escape dismisses
+
+### App-Specific Context
+The extension extracts recent messages/tweets for context-aware suggestions:
+- **Discord**: Recent channel messages
+- **LinkedIn**: Conversation messages
+- **Slack**: Channel messages
+- **Twitter/X**: Tweet thread for replies
+
+### Custom Tones
+Users can set per-app custom tones (e.g., "Professional" for LinkedIn, "Casual" for Discord) via the popup UI.
+
+### Cloud Sync
+Preferences (enabled state, custom tones) sync to Supabase with anonymous authentication.
 
 ### Loading the Extension
 1. Run `npm run dev` to start the API server
