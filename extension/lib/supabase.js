@@ -173,6 +173,7 @@ const SupabaseClient = {
           body: JSON.stringify({
             enabled: preferences.enabled,
             custom_tones: preferences.custom_tones || {},
+            suggestion_length: preferences.suggestion_length || 'short',
             updated_at: new Date().toISOString()
           })
         });
@@ -184,6 +185,7 @@ const SupabaseClient = {
             user_id: user.id,
             enabled: preferences.enabled,
             custom_tones: preferences.custom_tones || {},
+            suggestion_length: preferences.suggestion_length || 'short',
             updated_at: new Date().toISOString()
           })
         });

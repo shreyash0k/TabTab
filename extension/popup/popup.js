@@ -21,6 +21,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const syncIcon = document.getElementById('syncIcon');
   const syncText = document.getElementById('syncText');
   
+  // Suggestion length elements
+  const shortBtn = document.getElementById('shortBtn');
+  const normalBtn = document.getElementById('normalBtn');
+  
   // App configuration
   const APP_CONFIG = {
     discord: { name: 'Discord', icon: '🎮', defaultTone: 'Casual, friendly' },
@@ -32,9 +36,10 @@ document.addEventListener('DOMContentLoaded', () => {
   
   let currentApp = 'none';
   let customTones = {};
+  let suggestionLength = 'short'; // Default to short
 
   // Load current state
-  chrome.storage.sync.get(['enabled', 'customTones'], (result) => {
+  chrome.storage.sync.get(['enabled', 'customTones', 'suggestionLength'], (result) => {
     // Default to enabled if not set
     const isEnabled = result.enabled !== false;
     toggle.checked = isEnabled;
@@ -42,6 +47,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Load custom tones
     customTones = result.customTones || {};
+    
+    // Load suggestion length (default to 'short')
+    suggestionLength = result.suggestionLength || 'short';
+    updateLengthButtons(suggestionLength);
     
     // Detect current app
     detectCurrentApp();
@@ -59,6 +68,33 @@ document.addEventListener('DOMContentLoaded', () => {
       syncToCloud();
     });
   });
+
+  // Handle suggestion length buttons
+  shortBtn.addEventListener('click', () => {
+    setSuggestionLength('short');
+  });
+  
+  normalBtn.addEventListener('click', () => {
+    setSuggestionLength('normal');
+  });
+  
+  function setSuggestionLength(length) {
+    suggestionLength = length;
+    updateLengthButtons(length);
+    chrome.storage.sync.set({ suggestionLength: length }, () => {
+      syncToCloud();
+    });
+  }
+  
+  function updateLengthButtons(length) {
+    if (length === 'short') {
+      shortBtn.classList.add('active');
+      normalBtn.classList.remove('active');
+    } else {
+      shortBtn.classList.remove('active');
+      normalBtn.classList.add('active');
+    }
+  }
 
   function updateStatusDisplay(isEnabled) {
     if (!statusIndicator) return;

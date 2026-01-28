@@ -56,8 +56,13 @@ Uses dual-layer technique: transparent textarea over a mirror div that renders s
 
 ### API Configuration
 - Model: `llama-3.3-70b-versatile`
-- Max tokens: 50
-- Minimum input: 10 characters
+- Max tokens: 25 (Concise) or 50 (Longer)
+- Minimum input: 5 characters
+
+### Suggestion Length
+Users can choose between two suggestion lengths via the extension popup:
+- **Concise** (default): Very brief completions (5-15 words, 25 tokens)
+- **Longer**: Fuller completions (1-2 sentences, 50 tokens)
 
 ## Code Style
 
@@ -109,7 +114,7 @@ The extension extracts recent messages/tweets for context-aware suggestions:
 Users can set per-app custom tones (e.g., "Professional" for LinkedIn, "Casual" for Discord) via the popup UI.
 
 ### Cloud Sync
-Preferences (enabled state, custom tones) sync to Supabase with anonymous authentication.
+Preferences (enabled state, custom tones, suggestion length) sync to Supabase with anonymous authentication.
 
 ### Loading the Extension
 1. Run `npm run dev` to start the API server

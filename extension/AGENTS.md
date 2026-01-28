@@ -47,9 +47,10 @@ Supabase configuration for cloud sync.
 
 ### background/service-worker.js
 - Imports `config.js` and `lib/supabase.js` via `importScripts`
-- Makes API calls to `/api/suggest` endpoint with text, context, app, and customTone
+- Makes API calls to `/api/suggest` endpoint with text, context, app, customTone, and suggestionLength
+- Reads `suggestionLength` preference from storage before each API call
 - Handles enable/disable state via Chrome storage
-- Handles Supabase preference sync
+- Handles Supabase preference sync (includes suggestion_length)
 - Message types: `GET_SUGGESTION`, `GET_ENABLED_STATE`, `SET_ENABLED_STATE`, `GET_CUSTOM_TONE`, `SUPABASE_GET_PREFERENCES`, `SUPABASE_SAVE_PREFERENCES`, `SUPABASE_SYNC`
 
 ### content/content.js
@@ -96,6 +97,7 @@ Supabase client for anonymous authentication and preference sync:
 ### popup/
 UI features:
 - Enable/disable toggle with status indicator
+- Suggestion length toggle (Concise/Longer, default: Concise)
 - App context detection (Discord, LinkedIn, Slack, Twitter, or generic)
 - Custom tone editing per app
 - Cloud sync badge showing sync status
@@ -119,7 +121,9 @@ Get custom tone for app from storage
         ↓
 Send message to service worker with text, context, app, customTone
         ↓
-Service worker calls hosted API
+Service worker reads suggestionLength from storage
+        ↓
+Service worker calls hosted API with all params
         ↓
 Response returned to content script
         ↓
@@ -157,6 +161,17 @@ The extension includes enhanced support for complex contenteditable elements:
 | Draft.js | Full |
 | Slate.js | Full |
 | Tiptap | Full |
+
+## Suggestion Length
+
+Users can choose between two suggestion lengths via the popup UI:
+
+| Setting | Label | Description | Max Tokens |
+|---------|-------|-------------|------------|
+| `short` | Concise | Very brief, just a few words (5-15 words) | 25 |
+| `normal` | Longer | 1-2 sentences or a short phrase | 50 |
+
+Default is **Concise** (`short`). The setting is stored in `chrome.storage.sync` under `suggestionLength` and synced to Supabase as `suggestion_length`.
 
 ## Configuration
 

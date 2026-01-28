@@ -5,7 +5,7 @@
   'use strict';
 
   const DEBOUNCE_MS = 300;
-  const MIN_TEXT_LENGTH = 10;
+  const MIN_TEXT_LENGTH = 5;
   const MUTATION_THROTTLE_MS = 500; // Throttle mutation observer processing
   const PERIODIC_SCAN_MS = 10000; // Reduced frequency: 10 seconds instead of 2
 

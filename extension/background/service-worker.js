@@ -9,12 +9,16 @@ const API_URL = 'http://localhost:3000/api/suggest';
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'GET_SUGGESTION') {
-    handleGetSuggestion(message.text, message.context, message.app, message.customTone)
-      .then(sendResponse)
-      .catch((error) => {
-        console.error('Error getting suggestion:', error);
-        sendResponse({ suggestion: '', error: error.message });
-      });
+    // Get suggestion length from storage before making the API call
+    chrome.storage.sync.get(['suggestionLength'], (result) => {
+      const suggestionLength = result.suggestionLength || 'short';
+      handleGetSuggestion(message.text, message.context, message.app, message.customTone, suggestionLength)
+        .then(sendResponse)
+        .catch((error) => {
+          console.error('Error getting suggestion:', error);
+          sendResponse({ suggestion: '', error: error.message });
+        });
+    });
     // Return true to indicate we'll send response asynchronously
     return true;
   }
@@ -75,11 +79,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-async function handleGetSuggestion(text, context = [], app = null, customTone = null) {
-  console.log('[TabTab SW] handleGetSuggestion called, text length:', text?.length, 'context:', context?.length, 'app:', app, 'customTone:', customTone);
+async function handleGetSuggestion(text, context = [], app = null, customTone = null, suggestionLength = 'short') {
+  console.log('[TabTab SW] handleGetSuggestion called, text length:', text?.length, 'context:', context?.length, 'app:', app, 'customTone:', customTone, 'suggestionLength:', suggestionLength);
   
   // Don't fetch for short text
-  if (!text || text.length < 10) {
+  if (!text || text.length < 5) {
     console.log('[TabTab SW] Text too short, skipping');
     return { suggestion: '' };
   }
@@ -91,7 +95,7 @@ async function handleGetSuggestion(text, context = [], app = null, customTone = 
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ text, context, app, customTone }),
+      body: JSON.stringify({ text, context, app, customTone, suggestionLength }),
     });
 
     console.log('[TabTab SW] Response status:', response.status);
@@ -113,13 +117,14 @@ async function handleGetSuggestion(text, context = [], app = null, customTone = 
 async function syncToSupabase() {
   // Get local preferences
   const localPrefs = await new Promise((resolve) => {
-    chrome.storage.sync.get(['enabled', 'customTones'], resolve);
+    chrome.storage.sync.get(['enabled', 'customTones', 'suggestionLength'], resolve);
   });
   
   // Save to Supabase
   const result = await SupabaseClient.savePreferences({
     enabled: localPrefs.enabled !== false,
-    custom_tones: localPrefs.customTones || {}
+    custom_tones: localPrefs.customTones || {},
+    suggestion_length: localPrefs.suggestionLength || 'short'
   });
   
   return result;

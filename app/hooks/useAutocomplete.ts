@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
 const DEBOUNCE_MS = 300;
-const MIN_TEXT_LENGTH = 10;
+const MIN_TEXT_LENGTH = 5;
 
 interface UseAutocompleteReturn {
   text: string;

@@ -26,11 +26,15 @@ const APP_NAMES: Record<string, string> = {
   twitter: 'Twitter/X',
 };
 
-// Build system prompt based on app context and custom tone
-function buildSystemPrompt(app: string | null, context: string[], customTone: string | null): string {
+// Build system prompt based on app context, custom tone, and suggestion length
+function buildSystemPrompt(app: string | null, context: string[], customTone: string | null, suggestionLength: 'short' | 'normal' = 'short'): string {
+  const lengthInstruction = suggestionLength === 'short' 
+    ? '- Keep it VERY brief: just a few words to complete the current thought (5-15 words max)'
+    : '- Keep it brief: 1-2 sentences or a short phrase';
+
   const baseRules = `Rules:
 - Output ONLY the continuation text, nothing else
-- Keep it brief 1-2 sentences or a few words 
+${lengthInstruction}
 - If the input does not end with a space and your continuation starts with a new word, begin your output with a space
 - Use correct punctuation and capitalization
 - Match the style and tone of the existing text
@@ -78,11 +82,16 @@ ${baseRules}`;
 ${baseRules}`;
 }
 
+// Get max tokens based on suggestion length setting
+function getMaxTokens(suggestionLength: 'short' | 'normal'): number {
+  return suggestionLength === 'short' ? 25 : 50;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { text, context = [], app = null, customTone = null } = await request.json();
+    const { text, context = [], app = null, customTone = null, suggestionLength = 'short' } = await request.json();
     
-    console.log('[TabTab API] Received request, text length:', text?.length, 'context:', context?.length, 'app:', app, 'customTone:', customTone);
+    console.log('[TabTab API] Received request, text length:', text?.length, 'context:', context?.length, 'app:', app, 'customTone:', customTone, 'suggestionLength:', suggestionLength);
 
     if (!text || typeof text !== 'string') {
       return NextResponse.json(
@@ -92,11 +101,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Skip if text is too short
-    if (text.length < 10) {
+    if (text.length < 5) {
       return NextResponse.json({ suggestion: '' }, { headers: corsHeaders });
     }
 
-    const systemPrompt = buildSystemPrompt(app, context, customTone);
+    const validSuggestionLength = suggestionLength === 'normal' ? 'normal' : 'short';
+    const systemPrompt = buildSystemPrompt(app, context, customTone, validSuggestionLength);
+    const maxTokens = getMaxTokens(validSuggestionLength);
 
     const completion = await groq.chat.completions.create({
       model: 'llama-3.3-70b-versatile',
@@ -111,7 +122,7 @@ export async function POST(request: NextRequest) {
         },
       ],
       temperature: 0.7,
-      max_tokens: 50,
+      max_tokens: maxTokens,
       top_p: 0.9,
     });
 

@@ -162,6 +162,56 @@ body {
   transform: translateX(24px);
 }
 
+/* Suggestion Length Section */
+.length-section {
+  margin-bottom: 16px;
+}
+
+.length-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: #f9fafb;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
+
+.length-label {
+  font-weight: 600;
+  font-size: 15px;
+  color: #374151;
+}
+
+.length-toggle {
+  display: flex;
+  background: #e5e7eb;
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.length-btn {
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.length-btn:hover {
+  color: #374151;
+}
+
+.length-btn.active {
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
 /* App Context Section */
 .app-context-section {
   margin-bottom: 16px;
