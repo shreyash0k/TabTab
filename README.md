@@ -1,32 +1,30 @@
 # TabTab
 
-A Next.js web application with a centered textarea on the home page.
+GitHub Copilot-style autocomplete for any text field. Type, see ghost text suggestions, press **Tab** to accept.
 
-## Getting Started
+## Features
 
-First, install the dependencies:
+- **Ghost text suggestions** as you type
+- **Chrome extension** for any website
+- **Context-aware** on Discord, Slack, LinkedIn, Twitter/X
+- **Custom tones** per app (Professional, Casual, etc.)
+
+## Quick Start
 
 ```bash
 npm install
-```
-
-Then, run the development server:
-
-```bash
+cp .env.example .env.local  # Add your API key
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [localhost:3000](http://localhost:3000)
 
-## Project Structure
+## Chrome Extension
 
-- `app/` - Next.js App Router pages and layouts
-- `public/` - Static assets
-- Configuration files for Next.js, TypeScript, and Tailwind CSS
+1. Run `npm run dev`
+2. Go to `chrome://extensions/` → Enable Developer mode
+3. Load unpacked → Select `extension/` folder
 
-## Technologies
+---
 
-- Next.js 14
-- React 18
-- TypeScript
-- Tailwind CSS
+MIT License

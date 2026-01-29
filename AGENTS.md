@@ -31,7 +31,7 @@ CEREBRAS_API_KEY=your_key_here
 
 ```
 app/
-├── api/suggest/route.ts       # POST endpoint for Groq completions
+├── api/suggest/route.ts       # POST endpoint for Cerebras completions
 ├── components/
 │   └── AutocompleteTextarea.tsx  # Dual-layer ghost text component
 ├── hooks/
@@ -51,7 +51,7 @@ Uses dual-layer technique: transparent textarea over a mirror div that renders s
 
 ### Suggestion Flow
 1. User types → 300ms debounce → POST to `/api/suggest` with text before cursor
-2. Groq returns completion → displayed as ghost text at cursor
+2. Cerebras returns completion → displayed as ghost text at cursor
 3. Tab accepts (inserts at cursor), Escape dismisses, typing clears
 
 ### API Configuration
