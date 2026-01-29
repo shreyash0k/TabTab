@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Groq from 'groq-sdk';
+import Cerebras from '@cerebras/cerebras_cloud_sdk';
 
-// Initialize Groq client
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
+// Initialize Cerebras client
+const cerebras = new Cerebras({
+  apiKey: process.env.CEREBRAS_API_KEY,
 });
 
 // CORS headers for Chrome extension
@@ -109,8 +109,8 @@ export async function POST(request: NextRequest) {
     const systemPrompt = buildSystemPrompt(app, context, customTone, validSuggestionLength);
     const maxTokens = getMaxTokens(validSuggestionLength);
 
-    const completion = await groq.chat.completions.create({
-      model: 'meta-llama/llama-4-maverick-17b-128e-instruct',
+    const completion = await cerebras.chat.completions.create({
+      model: 'llama-3.3-70b',
       messages: [
         {
           role: 'system',
@@ -122,11 +122,13 @@ export async function POST(request: NextRequest) {
         },
       ],
       temperature: 0.7,
-      max_tokens: maxTokens,
+      max_completion_tokens: maxTokens,
       top_p: 0.9,
     });
 
-    let suggestion = completion.choices[0]?.message?.content?.trimEnd() || '';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const choices = (completion as any).choices;
+    let suggestion = choices?.[0]?.message?.content?.trimEnd() || '';
     
     // Post-process: ensure proper spacing between input and suggestion
     // If input doesn't end with whitespace and suggestion doesn't start with whitespace/punctuation
