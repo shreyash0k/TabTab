@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     const maxTokens = getMaxTokens(validSuggestionLength);
 
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: 'meta-llama/llama-4-maverick-17b-128e-instruct',
       messages: [
         {
           role: 'system',

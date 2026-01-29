@@ -9,7 +9,7 @@ TabTab is a GitHub Copilot-style text autocomplete web app. It shows inline ghos
 - Next.js 14 (App Router)
 - React 18 with TypeScript
 - Tailwind CSS
-- Groq API with Llama 3.1 8B for suggestions
+- Groq API with Llama 4 Maverick 17B for suggestions
 
 ## Commands
 
@@ -50,12 +50,12 @@ Uses dual-layer technique: transparent textarea over a mirror div that renders s
 - Accepting inserts at cursor position using `setSelectionRange`
 
 ### Suggestion Flow
-1. User types → 150ms debounce → POST to `/api/suggest` with text before cursor
+1. User types → 300ms debounce → POST to `/api/suggest` with text before cursor
 2. Groq returns completion → displayed as ghost text at cursor
 3. Tab accepts (inserts at cursor), Escape dismisses, typing clears
 
 ### API Configuration
-- Model: `llama-3.1-8b-instant`
+- Model: `meta-llama/llama-4-maverick-17b-128e-instruct`
 - Max tokens: 25 (Concise) or 50 (Longer)
 - Minimum input: 5 characters
 
@@ -99,7 +99,7 @@ extension/
 ### How It Works
 1. Content script detects `<textarea>`, `<input>`, and `contenteditable` elements
 2. Site-specific extractors detect Discord/LinkedIn/Slack/Twitter and extract conversation context
-3. On typing (150ms debounce), sends text + context to hosted API via service worker
+3. On typing (300ms debounce), sends text + context to hosted API via service worker
 4. Displays suggestion in a popup above the input field
 5. Tab accepts suggestion, Escape dismisses
 
