@@ -28,7 +28,3 @@ Open [localhost:3000](http://localhost:3000)
 1. Run `npm run dev`
 2. Go to `chrome://extensions/` → Enable Developer mode
 3. Load unpacked → Select `extension/` folder
-
----
-
-MIT License
