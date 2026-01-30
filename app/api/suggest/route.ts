@@ -35,7 +35,6 @@ function buildSystemPrompt(app: string | null, context: string[], customTone: st
   const baseRules = `Rules:
 - Output ONLY the continuation text, nothing else
 ${lengthInstruction}
-- If the input does not end with a space and your continuation starts with a new word, begin your output with a space
 - Use correct punctuation and capitalization
 - Match the style and tone of the existing text
 - Do not repeat any part of the input text
@@ -128,18 +127,7 @@ export async function POST(request: NextRequest) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const choices = (completion as any).choices;
-    let suggestion = choices?.[0]?.message?.content?.trimEnd() || '';
-    
-    // Post-process: ensure proper spacing between input and suggestion
-    // If input doesn't end with whitespace and suggestion doesn't start with whitespace/punctuation
-    if (suggestion && text.length > 0) {
-      const lastChar = text[text.length - 1];
-      const firstChar = suggestion[0];
-      const needsSpace = !/\s/.test(lastChar) && /^[a-zA-Z0-9]/.test(firstChar);
-      if (needsSpace) {
-        suggestion = ' ' + suggestion;
-      }
-    }
+    const suggestion = choices?.[0]?.message?.content?.trimEnd() || '';
     
     console.log('[TabTab API] Suggestion generated:', suggestion.substring(0, 50));
 

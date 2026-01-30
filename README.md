@@ -2,6 +2,10 @@
 
 GitHub Copilot-style autocomplete for any text field. Type, see ghost text suggestions, press **Tab** to accept.
 
+## Demo
+
+[![See TabTab in action](assets/demo-thumbnail.png)](https://www.loom.com/share/25a3b04eee294267aa72234ba914aa35)
+
 ## Features
 
 - **Ghost text suggestions** as you type
