@@ -1,6 +1,6 @@
 # TabTab
 
-GitHub Copilot style autocomplete for web. Type, see ghost text suggestions, press **Tab** to accept.
+GitHub Copilot style autocomplete for web. Type something, get text suggestions, press **Tab** to accept.
 
 ## Demo
 
