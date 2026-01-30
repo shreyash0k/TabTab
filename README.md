@@ -4,7 +4,9 @@ GitHub Copilot style autocomplete for web. Type something, get text suggestions,
 
 ## Demo
 
-[![See TabTab in action](assets/demo-thumbnail.png)](https://www.loom.com/share/25a3b04eee294267aa72234ba914aa35)
+<a href="https://www.loom.com/share/25a3b04eee294267aa72234ba914aa35" target="_blank">
+  <img src="assets/demo-thumbnail.png" alt="TabTab Demo Video" />
+</a>
 
 ## Features
 
