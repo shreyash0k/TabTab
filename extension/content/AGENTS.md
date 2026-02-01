@@ -13,7 +13,7 @@ Main script with all functionality in an IIFE to avoid polluting global scope.
 #### Constants
 ```javascript
 const DEBOUNCE_MS = 300;           // Wait before fetching suggestion
-const MIN_TEXT_LENGTH = 10;        // Minimum chars to trigger suggestion
+const MIN_TEXT_LENGTH = 5;         // Minimum chars to trigger suggestion
 const MUTATION_THROTTLE_MS = 500;  // Throttle mutation observer processing
 const PERIODIC_SCAN_MS = 10000;    // Periodic contenteditable scan interval
 ```

@@ -111,7 +111,7 @@ Content script detects input event
         ↓
 300ms debounce timer starts
         ↓
-Check: cursor at end? text > 10 chars?
+Check: cursor at end? text >= 5 chars?
         ↓
 Detect app (Discord/LinkedIn/Slack/Twitter)
         ↓
@@ -193,7 +193,7 @@ const SUPABASE_ANON_KEY = '...';
 In `content/content.js`:
 ```javascript
 const DEBOUNCE_MS = 300;
-const MIN_TEXT_LENGTH = 10;
+const MIN_TEXT_LENGTH = 5;
 const MUTATION_THROTTLE_MS = 500;
 const PERIODIC_SCAN_MS = 10000;
 ```

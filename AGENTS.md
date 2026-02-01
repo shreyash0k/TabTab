@@ -10,6 +10,7 @@ TabTab is a GitHub Copilot-style text autocomplete web app. It shows inline ghos
 - React 18 with TypeScript
 - Tailwind CSS
 - Cerebras API with Llama 3.3 70B for suggestions (ultra-fast inference)
+- Groq SDK (available as alternative provider)
 
 ## Commands
 
@@ -31,12 +32,14 @@ CEREBRAS_API_KEY=your_key_here
 
 ```
 app/
-├── api/suggest/route.ts       # POST endpoint for Cerebras completions
+├── api/suggest/route.ts          # POST endpoint for Cerebras completions
 ├── components/
 │   └── AutocompleteTextarea.tsx  # Dual-layer ghost text component
 ├── hooks/
-│   └── useAutocomplete.ts     # Debouncing, state, request management
-└── page.tsx                   # Main page
+│   └── useAutocomplete.ts        # Debouncing, state, request management
+├── globals.css                   # Global styles and Tailwind imports
+├── layout.tsx                    # Root layout component
+└── page.tsx                      # Main page
 ```
 
 ## Key Implementation Details
@@ -50,7 +53,7 @@ Uses dual-layer technique: transparent textarea over a mirror div that renders s
 - Accepting inserts at cursor position using `setSelectionRange`
 
 ### Suggestion Flow
-1. User types → 300ms debounce → POST to `/api/suggest` with text before cursor
+1. User types → 250ms debounce → POST to `/api/suggest` with text before cursor
 2. Cerebras returns completion → displayed as ghost text at cursor
 3. Tab accepts (inserts at cursor), Escape dismisses, typing clears
 
@@ -59,11 +62,14 @@ Uses dual-layer technique: transparent textarea over a mirror div that renders s
 - Model: `llama-3.3-70b`
 - Max tokens: 25 (Concise) or 50 (Longer)
 - Minimum input: 5 characters
+- API accepts: `text`, `context` (array), `app` (platform), `customTone`, `suggestionLength`
 
 ### Suggestion Length
-Users can choose between two suggestion lengths via the extension popup:
+The extension popup allows users to choose between two suggestion lengths:
 - **Concise** (default): Very brief completions (5-15 words, 25 tokens)
 - **Longer**: Fuller completions (1-2 sentences, 50 tokens)
+
+Note: The web app uses the default "Concise" setting. Suggestion length toggle is only available in the Chrome extension.
 
 ## Code Style
 
@@ -94,7 +100,8 @@ extension/
 │   └── supabase.js            # Supabase client for cloud sync
 ├── popup/
 │   ├── popup.html/js/css      # Toggle UI, app context, tone settings
-└── icons/                     # Extension icons (16/48/128px)
+├── icons/                     # Extension icons (16/48/128px)
+└── README.md                  # User-facing extension documentation
 ```
 
 ### How It Works

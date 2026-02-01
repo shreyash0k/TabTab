@@ -35,7 +35,7 @@ Update this URL when deploying to production.
 
 ### Key Function: handleGetSuggestion(text, context, app, customTone)
 
-1. Validates text length (minimum 10 characters)
+1. Validates text length (minimum 5 characters)
 2. Makes POST request to API with `{ text, context, app, customTone }`
 3. Returns suggestion or empty string on error
 4. Logs requests for debugging
