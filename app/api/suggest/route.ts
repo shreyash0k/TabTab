@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Cerebras from '@cerebras/cerebras_cloud_sdk';
+import Groq from 'groq-sdk';
 
-// Initialize Cerebras client
-const cerebras = new Cerebras({
-  apiKey: process.env.CEREBRAS_API_KEY,
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
 });
 
 // CORS headers for Chrome extension
@@ -108,8 +107,8 @@ export async function POST(request: NextRequest) {
     const systemPrompt = buildSystemPrompt(app, context, customTone, validSuggestionLength);
     const maxTokens = getMaxTokens(validSuggestionLength);
 
-    const completion = await cerebras.chat.completions.create({
-      model: 'llama-3.3-70b',
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
       messages: [
         {
           role: 'system',
@@ -121,13 +120,11 @@ export async function POST(request: NextRequest) {
         },
       ],
       temperature: 0.7,
-      max_completion_tokens: maxTokens,
+      max_tokens: maxTokens,
       top_p: 0.9,
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const choices = (completion as any).choices;
-    const suggestion = choices?.[0]?.message?.content?.trimEnd() || '';
+    const suggestion = completion.choices?.[0]?.message?.content?.trimEnd() || '';
     
     console.log('[TabTab API] Suggestion generated:', suggestion.substring(0, 50));
 
