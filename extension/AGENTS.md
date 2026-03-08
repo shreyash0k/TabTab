@@ -2,7 +2,7 @@
 
 ## Overview
 
-Chrome extension (Manifest V3) that provides AI-powered text autocomplete for any text input on any website. Shows suggestions in a popup above the input field. Includes app-specific context extraction for Discord, LinkedIn, Slack, and Twitter/X.
+Chrome extension (Manifest V3) that provides AI-powered text autocomplete as inline grey text (Gmail-style). Currently supported on LinkedIn DM only; other sites to be added. Includes app-specific context extraction for Discord, LinkedIn, Slack, and Twitter/X.
 
 ## Architecture
 
@@ -13,8 +13,8 @@ extension/
 ├── background/
 │   └── service-worker.js      # API calls, state management, Supabase sync
 ├── content/
-│   ├── content.js             # Main logic: detection, popup, keyboard handling
-│   ├── styles.css             # Style overrides for popup
+│   ├── content.js             # Main logic: detection, inline suggestions, keyboard handling
+│   ├── styles.css             # Inline suggestion span styling
 │   ├── discord-extractor.js   # Discord message context extraction
 │   ├── linkedin-extractor.js  # LinkedIn message context extraction
 │   ├── slack-extractor.js     # Slack message context extraction
@@ -55,24 +55,28 @@ Supabase configuration for cloud sync.
 
 ### content/content.js
 Core functionality:
+- **Site Gating**: `isSupportedInlineSite(el)` limits suggestions to supported sites (LinkedIn DM only for now)
 - **Input Detection**: Finds `<textarea>`, `<input type="text">`, and `contenteditable` elements
-- **MutationObserver**: Watches for dynamically added inputs (SPAs)
+- **MutationObserver**: Watches for dynamically added inputs (SPAs); skips when `isManipulatingSuggestion` is true
 - **Debouncing**: 300ms delay before fetching suggestions
 - **Context Extraction**: Detects current app and extracts conversation context via extractors
 - **Custom Tone**: Retrieves per-app custom tone from storage
-- **Popup Display**: Shows styled popup above input with suggestion
-- **Keyboard Handling**: Tab to accept, Escape to dismiss
+- **Inline Suggestion Display**: Inserts grey `<span data-tabtab-inline contenteditable="false">` at cursor position
+- **Keyboard Handling**: Tab to accept (converts span to real text), Escape to dismiss
 
 Key functions:
-- `createPopup()` - Creates and styles the suggestion popup
-- `showPopup(inputEl, suggestion)` - Positions popup above input
+- `isSupportedInlineSite(el)` - Gates suggestions to supported site+element combos
+- `showInlineSuggestion(el, suggestion)` - Inserts grey span at cursor position
+- `removeInlineSuggestion()` - Removes the inline suggestion span
+- `acceptInlineSuggestion(el)` - Converts suggestion span to real text content
 - `handleInput(e)` - Debounced input handler
 - `handleKeyDown(e)` - Tab/Escape key handling
-- `insertTextAtCursor(el, text, inputType)` - Inserts accepted suggestion
+- `insertTextAtCursor(el, text, inputType)` - Inserts text at cursor position
 - `fetchSuggestion(text)` - Gets suggestion with app context and custom tone
 - `getCustomTone(app)` - Retrieves custom tone for app
+- `getTextFromElement(el, inputType)` - Extracts text, excluding inline suggestion span
+- `isCursorAtEnd(el, inputType)` - Multi-method cursor position detection (accounts for inline span)
 - `tryExecCommand(el, text)` - execCommand insertion for rich editors
-- `isCursorAtEnd(el, inputType)` - Multi-method cursor position detection
 - `dispatchInputEvents(el, text)` - Dispatches events for editor frameworks
 
 ### content/[app]-extractor.js
@@ -127,40 +131,26 @@ Service worker calls hosted API with all params
         ↓
 Response returned to content script
         ↓
-Popup displayed above input
+Check: isSupportedInlineSite(el)?
         ↓
-Tab → insert text | Escape → dismiss
+Grey inline suggestion span inserted at cursor
+        ↓
+Tab → accept (convert to real text) | Escape → dismiss
 ```
 
-## Supported Input Types
+## Supported Sites for Inline Suggestions
 
-| Type | Support |
-|------|---------|
-| `<textarea>` | Full |
-| `<input type="text">` | Full |
-| `<input type="search">` | Full |
-| `<input type="email">` | Full |
-| `<input type="url">` | Full |
-| `contenteditable` | Full |
-| Rich text editors | Full |
-| Password fields | Excluded |
-| Read-only fields | Excluded |
+Inline grey text suggestions are gated by `isSupportedInlineSite(el)`. Currently supported:
 
-### Rich Text Editor Support
+| Site | Input Type | Status |
+|------|-----------|--------|
+| LinkedIn DM | contenteditable (msg-form) | Supported |
+| Discord | contenteditable | Not yet supported |
+| Slack | contenteditable | Not yet supported |
+| Twitter/X | contenteditable | Not yet supported |
+| Generic `<textarea>` / `<input>` | standard | Not yet supported |
 
-The extension includes enhanced support for complex contenteditable elements:
-
-| Platform/Editor | Support |
-|-----------------|---------|
-| LinkedIn Messages | Full (with context) |
-| Discord | Full (with context) |
-| Slack | Full (with context) |
-| Twitter/X | Full (with context) |
-| Quill Editor | Full |
-| ProseMirror | Full |
-| Draft.js | Full |
-| Slate.js | Full |
-| Tiptap | Full |
+To add a new site, add a condition to `isSupportedInlineSite()` in `content/content.js`.
 
 ## Suggestion Length
 
@@ -203,8 +193,9 @@ const PERIODIC_SCAN_MS = 10000;
 ### Testing Locally
 1. Start the Next.js API server: `npm run dev`
 2. Load extension in Chrome: `chrome://extensions/` → Load unpacked
-3. Test on any website with text inputs
-4. Test app-specific context on Discord, LinkedIn, Slack, Twitter
+3. Test on LinkedIn DM: type 5+ chars, verify grey inline suggestion appears
+4. Press Tab to accept, Escape to dismiss, keep typing to clear
+5. Verify other sites show no suggestions (expected until support is added)
 
 ### Regenerating Icons
 ```bash
@@ -221,7 +212,8 @@ node generate-icons.js
 ## Known Limitations
 
 - Requires hosted API server running
-- Some sites with Shadow DOM may not work (e.g., Notion)
+- Inline suggestions only work on LinkedIn DM for now (other sites need to be added to `isSupportedInlineSite()`)
 - Suggestion only triggers when cursor is at end of text
+- LinkedIn's editor may normalize DOM and interfere with the inline span in edge cases
 - Context extraction depends on stable DOM selectors (may break with app updates)
 - Anonymous Supabase auth requires Supabase project with anonymous sign-in enabled

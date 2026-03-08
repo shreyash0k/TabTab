@@ -1,29 +1,30 @@
 // TabTab Content Script
-// Detects text fields and shows suggestion popup
+// Detects text fields and shows inline grey text suggestions (Gmail-style)
+// Currently supported: LinkedIn DM only
 
 (function() {
   'use strict';
 
   const DEBOUNCE_MS = 300;
   const MIN_TEXT_LENGTH = 5;
-  const MUTATION_THROTTLE_MS = 500; // Throttle mutation observer processing
-  const PERIODIC_SCAN_MS = 10000; // Reduced frequency: 10 seconds instead of 2
+  const MUTATION_THROTTLE_MS = 500;
+  const PERIODIC_SCAN_MS = 10000;
 
   let currentInput = null;
   let currentInputType = null; // 'standard' or 'contenteditable'
   let currentSuggestion = '';
-  let popupElement = null;
   let debounceTimer = null;
   let isEnabled = true;
   let isExtensionValid = true;
   let mutationThrottleTimer = null;
   let pendingMutations = false;
-  let processedElements = new WeakSet(); // Track elements we've already checked
+  let processedElements = new WeakSet();
+  let inlineSuggestionSpan = null;
+  let isManipulatingSuggestion = false;
 
   // Check if extension context is still valid
   function isExtensionContextValid() {
     try {
-      // This will throw if the extension context is invalidated
       return chrome.runtime && chrome.runtime.id && isExtensionValid;
     } catch (e) {
       isExtensionValid = false;
@@ -42,7 +43,6 @@
     try {
       chrome.runtime.sendMessage(message, (response) => {
         if (chrome.runtime.lastError) {
-          // Check if it's an invalidated context error
           const errorMsg = chrome.runtime.lastError.message || '';
           if (errorMsg.includes('Extension context invalidated') || 
               errorMsg.includes('message port closed')) {
@@ -64,14 +64,9 @@
 
   // Cleanup function when extension is invalidated
   function cleanup() {
-    hidePopup();
+    removeInlineSuggestion();
     currentSuggestion = '';
     currentInput = null;
-    // Remove popup element if it exists
-    if (popupElement && popupElement.parentNode) {
-      popupElement.parentNode.removeChild(popupElement);
-      popupElement = null;
-    }
   }
 
   // Check if extension is enabled
@@ -89,7 +84,7 @@
       if (changes.enabled) {
         isEnabled = changes.enabled.newValue;
         if (!isEnabled) {
-          hidePopup();
+          removeInlineSuggestion();
           currentSuggestion = '';
         }
       }
@@ -98,267 +93,209 @@
     console.log('[TabTab] Could not add storage listener:', e.message);
   }
 
-  // Create the suggestion popup element
-  function createPopup() {
-    if (popupElement) return popupElement;
-    
-    popupElement = document.createElement('div');
-    popupElement.id = 'tabtab-suggestion-popup';
-    popupElement.setAttribute('aria-hidden', 'true');
-    
-    // Get extension icon URL
-    const iconUrl = chrome.runtime.getURL('icons/icon16.png');
-    
-    // Create inner structure
-    popupElement.innerHTML = `
-      <div class="tabtab-popup-header">
-        <img class="tabtab-popup-icon" src="${iconUrl}" alt="TabTab" />
-        <span class="tabtab-popup-title">TabTab Suggestion</span>
-        <button class="tabtab-popup-hint" id="tabtab-accept-btn">Tab to accept</button>
-      </div>
-      <div class="tabtab-popup-content"></div>
-    `;
-    
-    document.body.appendChild(popupElement);
-    
-    // Add click handler for the accept button
-    const acceptBtn = popupElement.querySelector('#tabtab-accept-btn');
-    acceptBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (currentSuggestion && currentInput) {
-        insertTextAtCursor(currentInput, currentSuggestion, currentInputType);
-        currentSuggestion = '';
-        hidePopup();
-        // Refocus the input
-        currentInput.focus();
-      }
-    });
-    
-    // Add styles
-    const style = document.createElement('style');
-    style.textContent = `
-      #tabtab-suggestion-popup {
-        position: absolute;
-        display: none;
-        z-index: 2147483647;
-        max-width: 500px;
-        min-width: 250px;
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-        border: 1px solid #334155;
-        border-radius: 12px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255,255,255,0.05);
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        font-size: 14px;
-        overflow: hidden;
-        animation: tabtab-slide-down 0.2s ease-out;
-      }
-      
-      @keyframes tabtab-slide-down {
-        from { opacity: 0; transform: translateY(8px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      
-      .tabtab-popup-header {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 14px;
-        background: rgba(0, 0, 0, 0.2);
-        border-bottom: 1px solid #334155;
-        color: #94a3b8;
-        font-size: 12px;
-      }
-      
-      .tabtab-popup-icon {
-        width: 16px;
-        height: 16px;
-        object-fit: contain;
-      }
-      
-      .tabtab-popup-title {
-        font-weight: 600;
-        color: #e2e8f0;
-        letter-spacing: 0.01em;
-      }
-      
-      .tabtab-popup-hint {
-        margin-left: auto;
-        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-        padding: 4px 10px;
-        border-radius: 6px;
-        font-size: 11px;
-        font-weight: 500;
-        color: #ffffff;
-        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
-        border: none;
-        cursor: pointer;
-        transition: all 0.15s ease;
-      }
-      
-      .tabtab-popup-hint:hover {
-        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-        box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
-        transform: translateY(-1px);
-      }
-      
-      .tabtab-popup-hint:active {
-        transform: translateY(0);
-        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
-      }
-      
-      .tabtab-popup-content {
-        padding: 14px;
-        color: #f1f5f9;
-        line-height: 1.6;
-        white-space: pre-wrap;
-        word-wrap: break-word;
-        font-size: 14px;
-      }
-      
-      /* Light mode styles */
-      @media (prefers-color-scheme: light) {
-        #tabtab-suggestion-popup {
-          background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-          border-color: #e2e8f0;
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0,0,0,0.05);
-        }
-        
-        .tabtab-popup-header {
-          background: rgba(0, 0, 0, 0.02);
-          border-bottom-color: #e2e8f0;
-          color: #64748b;
-        }
-        
-        .tabtab-popup-title {
-          color: #1e293b;
-        }
-        
-        .tabtab-popup-content {
-          color: #334155;
-        }
-      }
-    `;
-    document.head.appendChild(style);
-    
-    return popupElement;
+  // ─── Element type checks ───────────────────────────────────────────
+
+  function isContentEditable(el) {
+    if (!el) return false;
+    return el.isContentEditable || el.contentEditable === 'true';
   }
 
-  // Position and show the popup above the input
-  function showPopup(inputEl, suggestion) {
-    if (!suggestion || !inputEl) {
-      hidePopup();
+  // Gate: only show inline suggestions on supported site+element combos.
+  // Currently LinkedIn DM only. Add more sites here as support is added.
+  function isSupportedInlineSite(el) {
+    if (!isContentEditable(el)) return false;
+
+    if (window.TabTabLinkedIn?.isLinkedIn()) {
+      const className = (el.className || '').toLowerCase();
+      const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+      const role = el.getAttribute('role');
+
+      if (className.includes('msg-form') ||
+          role === 'textbox' ||
+          ariaLabel.includes('message')) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  // ─── Inline suggestion functions ───────────────────────────────────
+
+  // Defer resetting the manipulation flag so that async observers/event
+  // handlers that fire from our DOM changes still see it as true.
+  function endManipulation() {
+    setTimeout(() => { isManipulatingSuggestion = false; }, 0);
+  }
+
+  function removeInlineSuggestion() {
+    if (!inlineSuggestionSpan) {
+      // Fallback: remove any orphaned spans in the DOM
+      const orphans = document.querySelectorAll('[data-tabtab-inline]');
+      if (orphans.length === 0) return;
+
+      isManipulatingSuggestion = true;
+      orphans.forEach(span => span.remove());
+      endManipulation();
       return;
     }
 
-    const popup = createPopup();
-    const rect = inputEl.getBoundingClientRect();
-    
-    // Set the suggestion content
-    const contentEl = popup.querySelector('.tabtab-popup-content');
-    contentEl.textContent = suggestion;
-    
-    // Show popup temporarily to measure it
-    popup.style.visibility = 'hidden';
-    popup.style.display = 'block';
-    const popupRect = popup.getBoundingClientRect();
-    popup.style.visibility = 'visible';
-    
-    // Calculate position - ABOVE the input by default
-    let left = rect.left + window.scrollX;
-    let top = rect.top + window.scrollY - popupRect.height - 8;
-    
-    // Make sure popup doesn't go off-screen to the right
-    const popupWidth = Math.min(500, Math.max(rect.width, 300));
-    if (left + popupWidth > window.innerWidth) {
-      left = window.innerWidth - popupWidth - 20;
+    isManipulatingSuggestion = true;
+    try {
+      if (inlineSuggestionSpan.parentNode) {
+        inlineSuggestionSpan.parentNode.removeChild(inlineSuggestionSpan);
+      }
+    } catch (e) {
+      console.log('[TabTab] Error removing inline suggestion:', e);
     }
-    
-    // If popup would go above viewport, show it below the input instead
-    if (top < window.scrollY + 10) {
-      top = rect.bottom + window.scrollY + 8;
-    }
-    
-    popup.style.left = `${Math.max(10, left)}px`;
-    popup.style.top = `${Math.max(10, top)}px`;
-    popup.style.maxWidth = `${popupWidth}px`;
+    inlineSuggestionSpan = null;
+    endManipulation();
   }
 
-  // Hide the popup
-  function hidePopup() {
-    if (popupElement) {
-      popupElement.style.display = 'none';
-      const contentEl = popupElement.querySelector('.tabtab-popup-content');
-      if (contentEl) contentEl.textContent = '';
+  function showInlineSuggestion(el, suggestion) {
+    if (!suggestion || !el) {
+      removeInlineSuggestion();
+      return;
     }
+
+    removeInlineSuggestion();
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+
+    const range = selection.getRangeAt(0);
+
+    const span = document.createElement('span');
+    span.setAttribute('data-tabtab-inline', 'true');
+    span.contentEditable = 'false';
+    span.textContent = suggestion;
+
+    isManipulatingSuggestion = true;
+    try {
+      range.collapse(false);
+      range.insertNode(span);
+
+      // Move cursor back before the span so subsequent typing stays in front
+      const newRange = document.createRange();
+      newRange.setStartBefore(span);
+      newRange.setEndBefore(span);
+      selection.removeAllRanges();
+      selection.addRange(newRange);
+
+      inlineSuggestionSpan = span;
+    } catch (e) {
+      console.log('[TabTab] Error inserting inline suggestion:', e);
+      if (span.parentNode) span.parentNode.removeChild(span);
+    }
+    endManipulation();
   }
 
-  // Get text from element based on type
+  function acceptInlineSuggestion(el) {
+    if (!inlineSuggestionSpan) return;
+
+    const text = inlineSuggestionSpan.textContent;
+
+    isManipulatingSuggestion = true;
+    try {
+      // Place cursor where the span is, then remove the span
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.setStartBefore(inlineSuggestionSpan);
+      range.setEndBefore(inlineSuggestionSpan);
+      selection.removeAllRanges();
+      selection.addRange(range);
+
+      if (inlineSuggestionSpan.parentNode) {
+        inlineSuggestionSpan.parentNode.removeChild(inlineSuggestionSpan);
+      }
+      inlineSuggestionSpan = null;
+    } catch (e) {
+      console.log('[TabTab] Error removing span during accept:', e);
+      inlineSuggestionSpan = null;
+    }
+    endManipulation();
+
+    // Now insert the text as real content
+    insertTextAtCursor(el, text, 'contenteditable');
+  }
+
+  // ─── Text extraction & cursor helpers ──────────────────────────────
+
   function getTextFromElement(el, inputType) {
     if (inputType === 'contenteditable') {
-      // For complex rich text editors (LinkedIn, Discord, etc.), we need to
-      // extract text more carefully to handle nested elements like <p>, <div>, <br>
-      let text = '';
-      
-      // Try innerText first as it usually handles line breaks better
-      text = el.innerText || '';
-      
-      // Clean up the text - remove excessive whitespace but keep intentional line breaks
+      // Clone the element and strip the suggestion span so its text
+      // is never sent to the API.
+      const clone = el.cloneNode(true);
+      clone.querySelectorAll('[data-tabtab-inline]').forEach(s => s.remove());
+
+      let text = clone.innerText || '';
       text = text.replace(/\n{3,}/g, '\n\n').trim();
-      
-      // If innerText is empty, try textContent as fallback
       if (!text) {
-        text = el.textContent || '';
+        text = clone.textContent || '';
       }
-      
       return text;
     }
     return el.value || '';
   }
 
-  // Check if cursor is at end of text
   function isCursorAtEnd(el, inputType) {
     if (inputType === 'contenteditable') {
       const selection = window.getSelection();
       if (!selection || selection.rangeCount === 0) return false;
-      
+
       const range = selection.getRangeAt(0);
-      
-      // For complex editors (LinkedIn, Discord, etc.), we need a more robust approach
-      // Check if cursor is at or near the end of the content
-      
-      // Method 1: Check if we're in the last text node and at its end
+
+      // When an inline suggestion span is present the cursor sits right
+      // before it. Check whether the only content after the cursor is the
+      // suggestion span (i.e. no real user text after cursor).
+      if (inlineSuggestionSpan && el.contains(inlineSuggestionSpan)) {
+        try {
+          const afterRange = document.createRange();
+          afterRange.setStart(range.endContainer, range.endOffset);
+          afterRange.setEndAfter(el.lastChild || el);
+
+          const fragment = afterRange.cloneContents();
+          const tempDiv = document.createElement('div');
+          tempDiv.appendChild(fragment);
+          tempDiv.querySelectorAll('[data-tabtab-inline]').forEach(s => s.remove());
+
+          if (tempDiv.textContent.trim() === '') {
+            return true;
+          }
+        } catch (e) {
+          // fall through to standard checks
+        }
+      }
+
+      // Method 1: last text node check
       const lastTextNode = getLastTextNode(el);
       if (lastTextNode) {
         if (range.endContainer === lastTextNode && range.endOffset === lastTextNode.length) {
           return true;
         }
-        // Also check if range is after the last text node
         if (range.endContainer === lastTextNode.parentNode && 
             range.endOffset >= Array.from(lastTextNode.parentNode.childNodes).indexOf(lastTextNode)) {
           return true;
         }
       }
-      
-      // Method 2: Traditional range comparison
+
+      // Method 2: range comparison
       try {
         const endRange = document.createRange();
         endRange.selectNodeContents(el);
         endRange.collapse(false);
-        
+
         if (range.compareBoundaryPoints(Range.END_TO_END, endRange) >= 0) {
           return true;
         }
       } catch (e) {
         // Range comparison can fail with complex DOM structures
       }
-      
-      // Method 3: Check if cursor is in the last child element and at the end
-      // This handles cases like <p>text</p><p><br></p> where cursor is in the last empty p
+
+      // Method 3: last meaningful child
       const lastChild = getLastMeaningfulChild(el);
       if (lastChild) {
         if (range.endContainer === lastChild || el.contains(range.endContainer)) {
-          // Check if there's any text after the cursor position
           const afterRange = document.createRange();
           afterRange.setStart(range.endContainer, range.endOffset);
           afterRange.setEndAfter(el.lastChild || el);
@@ -368,16 +305,25 @@
           }
         }
       }
-      
+
       return false;
     }
-    
+
     return el.selectionStart === el.value.length;
   }
-  
-  // Helper: Get the last text node in an element
+
+  // Helper: last text node, skipping the inline suggestion span
   function getLastTextNode(el) {
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+    const filter = {
+      acceptNode(node) {
+        if (node.parentElement?.hasAttribute('data-tabtab-inline')) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    };
+
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, filter);
     let lastTextNode = null;
     let node;
     while ((node = walker.nextNode())) {
@@ -385,21 +331,23 @@
         lastTextNode = node;
       }
     }
-    // If no non-empty text node, return the last text node anyway
     if (!lastTextNode) {
-      const allTextWalker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
-      while ((node = allTextWalker.nextNode())) {
+      const fallback = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, filter);
+      while ((node = fallback.nextNode())) {
         lastTextNode = node;
       }
     }
     return lastTextNode;
   }
-  
-  // Helper: Get the last meaningful child (non-empty or last child)
+
+  // Helper: last meaningful child, skipping the inline suggestion span
   function getLastMeaningfulChild(el) {
     const children = el.childNodes;
     for (let i = children.length - 1; i >= 0; i--) {
       const child = children[i];
+      if (child.nodeType === Node.ELEMENT_NODE && child.hasAttribute('data-tabtab-inline')) {
+        continue;
+      }
       if (child.nodeType === Node.TEXT_NODE && child.textContent.trim() !== '') {
         return child;
       }
@@ -410,34 +358,28 @@
     return el.lastChild;
   }
 
-  // Insert text at cursor position
+  // ─── Text insertion ────────────────────────────────────────────────
+
   function insertTextAtCursor(el, text, inputType) {
     if (inputType === 'contenteditable') {
       const selection = window.getSelection();
       if (!selection || selection.rangeCount === 0) return;
-      
-      // Try using execCommand first as it works better with rich text editors
-      // This is the most compatible approach for LinkedIn, Discord, Slack, etc.
+
       const useExecCommand = tryExecCommand(el, text);
-      
+
       if (!useExecCommand) {
-        // Fallback to manual insertion
         const range = selection.getRangeAt(0);
         range.deleteContents();
-        
-        // Check if we need to insert inside a specific element structure
+
         let insertTarget = range.endContainer;
-        
-        // If we're in a <br> element or empty element, find the parent
+
         if (insertTarget.nodeName === 'BR' || 
             (insertTarget.nodeType === Node.ELEMENT_NODE && insertTarget.childNodes.length === 0)) {
           insertTarget = insertTarget.parentNode;
         }
-        
-        // Create text node
+
         const textNode = document.createTextNode(text);
-        
-        // If the current container is a <p> or similar block element with just a <br>, replace the <br>
+
         if (insertTarget.nodeType === Node.ELEMENT_NODE) {
           const onlyChild = insertTarget.childNodes.length === 1 && 
                            insertTarget.firstChild.nodeName === 'BR';
@@ -450,19 +392,16 @@
         } else {
           range.insertNode(textNode);
         }
-        
-        // Move cursor to end of inserted text
+
         const newRange = document.createRange();
         newRange.setStartAfter(textNode);
         newRange.setEndAfter(textNode);
         selection.removeAllRanges();
         selection.addRange(newRange);
       }
-      
-      // Dispatch various input events to notify the app of changes
-      // Different apps listen for different events
+
       dispatchInputEvents(el, text);
-      
+
     } else {
       const cursorPos = el.selectionStart;
       el.value = el.value.slice(0, cursorPos) + text + el.value.slice(cursorPos);
@@ -471,16 +410,11 @@
       el.dispatchEvent(new Event('input', { bubbles: true }));
     }
   }
-  
-  // Try to use execCommand for text insertion (better compatibility with rich editors)
+
   function tryExecCommand(el, text) {
     try {
-      // Focus the element first
       el.focus();
-      
-      // Use insertText command - most compatible with modern editors
       const result = document.execCommand('insertText', false, text);
-      
       if (result) {
         console.log('[TabTab] Used execCommand for text insertion');
         return true;
@@ -490,44 +424,35 @@
     }
     return false;
   }
-  
-  // Dispatch various input events to notify different types of editors
+
   function dispatchInputEvents(el, text) {
-    // Standard input event
     el.dispatchEvent(new InputEvent('input', { 
       bubbles: true, 
       cancelable: true,
       inputType: 'insertText', 
       data: text 
     }));
-    
-    // Some editors also listen for these events
+
     el.dispatchEvent(new Event('change', { bubbles: true }));
-    
-    // KeyboardEvent for editors that track keystrokes
-    // This helps with editors that build their state from keyboard events
+
     try {
       el.dispatchEvent(new KeyboardEvent('keyup', { 
         bubbles: true, 
         cancelable: true,
         key: text.slice(-1) || ' '
       }));
-    } catch (e) {
-      // KeyboardEvent might not work in all contexts
-    }
-    
-    // Composition events for editors that use IME-style input
+    } catch (e) {}
+
     try {
       el.dispatchEvent(new CompositionEvent('compositionend', {
         bubbles: true,
         data: text
       }));
-    } catch (e) {
-      // CompositionEvent might not work in all contexts
-    }
+    } catch (e) {}
   }
 
-  // Get custom tone from storage
+  // ─── Custom tone & suggestion fetching ─────────────────────────────
+
   function getCustomTone(app) {
     return new Promise((resolve) => {
       if (!app || !isExtensionContextValid()) {
@@ -543,18 +468,16 @@
     });
   }
 
-  // Fetch suggestion from background script
   async function fetchSuggestion(text) {
     if (!isExtensionContextValid()) {
       return '';
     }
-    
+
     console.log('[TabTab] Fetching suggestion for text length:', text.length);
-    
-    // Extract app-specific context if available
+
     let context = [];
     let app = null;
-    
+
     if (window.TabTabDiscord && window.TabTabDiscord.isDiscord()) {
       app = 'discord';
       context = window.TabTabDiscord.extractContext();
@@ -572,13 +495,12 @@
       context = window.TabTabTwitter.extractContext();
       console.log('[TabTab] Twitter context extracted:', context.length, 'tweets');
     }
-    
-    // Get custom tone for this app
+
     const customTone = await getCustomTone(app);
     if (customTone) {
       console.log('[TabTab] Using custom tone:', customTone);
     }
-    
+
     return new Promise((resolve) => {
       safeSendMessage(
         { type: 'GET_SUGGESTION', text, context, app, customTone },
@@ -590,182 +512,148 @@
     });
   }
 
-  // Handle input events with debouncing
+  // ─── Event handlers ────────────────────────────────────────────────
+
   function handleInput(e) {
     if (!isExtensionContextValid()) return;
-    
+    if (isManipulatingSuggestion) return;
+
     const el = e.target;
     const inputType = isContentEditable(el) ? 'contenteditable' : 'standard';
-    
+
     console.log('[TabTab] Input event detected, enabled:', isEnabled, 'target:', el.tagName, 'type:', inputType);
-    
+
     if (!isEnabled) return;
-    
-    // Clear existing suggestion and timer
+    if (!isSupportedInlineSite(el)) return;
+
     currentSuggestion = '';
-    hidePopup();
-    
+    removeInlineSuggestion();
+
     if (debounceTimer) {
       clearTimeout(debounceTimer);
     }
-    
+
     const text = getTextFromElement(el, inputType);
-    
-    // Only suggest when cursor is at end of text
+
     if (!isCursorAtEnd(el, inputType)) {
       console.log('[TabTab] Cursor not at end, skipping');
       return;
     }
-    
-    // Don't fetch for short text
+
     if (text.length < MIN_TEXT_LENGTH) {
       console.log('[TabTab] Text too short:', text.length);
       return;
     }
-    
+
     console.log('[TabTab] Will fetch suggestion in', DEBOUNCE_MS, 'ms');
-    
+
     debounceTimer = setTimeout(async () => {
       if (!isCursorAtEnd(el, inputType)) {
         return;
       }
-      
+
       const currentText = getTextFromElement(el, inputType);
       const suggestion = await fetchSuggestion(currentText);
-      
+
       if (document.activeElement === el && isCursorAtEnd(el, inputType) && suggestion) {
         currentSuggestion = suggestion;
         currentInput = el;
         currentInputType = inputType;
-        console.log('[TabTab] Showing popup with suggestion:', suggestion);
-        showPopup(el, suggestion);
+        console.log('[TabTab] Showing inline suggestion:', suggestion);
+        showInlineSuggestion(el, suggestion);
       }
     }, DEBOUNCE_MS);
   }
 
-  // Handle keydown for Tab/Escape
   function handleKeyDown(e) {
     if (!isExtensionContextValid()) return;
     if (!isEnabled || !currentSuggestion || !currentInput) return;
-    
-    // Tab accepts the suggestion
+
     if (e.key === 'Tab' && currentSuggestion) {
       e.preventDefault();
       e.stopPropagation();
-      
-      insertTextAtCursor(currentInput, currentSuggestion, currentInputType);
-      
+
+      acceptInlineSuggestion(currentInput);
       currentSuggestion = '';
-      hidePopup();
       return;
     }
-    
-    // Escape dismisses the suggestion
+
     if (e.key === 'Escape' && currentSuggestion) {
       e.preventDefault();
       currentSuggestion = '';
-      hidePopup();
+      removeInlineSuggestion();
       return;
     }
   }
 
-  // Handle focus out - clear suggestion
   function handleBlur(e) {
     setTimeout(() => {
       if (document.activeElement !== e.target) {
         currentSuggestion = '';
         currentInput = null;
         currentInputType = null;
-        hidePopup();
+        removeInlineSuggestion();
       }
     }, 150);
   }
 
-  // Handle scroll - reposition popup
-  function handleScroll(e) {
-    if (currentSuggestion && currentInput && e.target === currentInput) {
-      showPopup(currentInput, currentSuggestion);
-    }
-  }
+  // ─── Input detection & listener attachment ─────────────────────────
 
-  // Check if element is contenteditable
-  function isContentEditable(el) {
-    if (!el) return false;
-    return el.isContentEditable || el.contentEditable === 'true';
-  }
-
-  // Check if element is a valid standard text input (input/textarea)
   function isValidStandardInput(el) {
     if (!el) return false;
-    
+
     if (el.dataset?.tabtabNative === 'true') {
       console.log('[TabTab] Skipping native TabTab input');
       return false;
     }
-    
+
     if (el.tagName === 'TEXTAREA') {
       return !el.readOnly && !el.disabled;
     }
-    
+
     if (el.tagName === 'INPUT') {
       const type = el.type?.toLowerCase() || 'text';
       const validTypes = ['text', 'search', 'email', 'url'];
       return validTypes.includes(type) && !el.readOnly && !el.disabled;
     }
-    
+
     return false;
   }
 
-  // Check if element is a valid contenteditable
   function isValidContentEditable(el) {
     if (!el) return false;
     if (el.dataset?.tabtabAttached === 'true') return false;
     if (el.dataset?.tabtabNative === 'true') return false;
     if (!isContentEditable(el)) return false;
-    
+
     const rect = el.getBoundingClientRect();
     if (rect.width < 50 || rect.height < 20) return false;
-    
-    // Check for common rich text editor patterns
-    // These are additional indicators that this is a real input field
+
     const role = el.getAttribute('role');
     const ariaLabel = el.getAttribute('aria-label');
     const ariaMultiline = el.getAttribute('aria-multiline');
-    
-    // LinkedIn, Discord, Slack, etc. often use role="textbox"
+
     if (role === 'textbox') {
       console.log('[TabTab] Found textbox role contenteditable:', el.className);
       return true;
     }
-    
-    // Check for common class patterns in rich text editors
+
     const className = el.className || '';
     const richEditorPatterns = [
-      'msg-form', // LinkedIn
-      'editor', // Generic
-      'input', // Generic
-      'compose', // Email clients
-      'message', // Chat apps
-      'textbox', // Generic
-      'ql-editor', // Quill
-      'ProseMirror', // ProseMirror
-      'DraftEditor', // Draft.js
-      'slate', // Slate.js
-      'tiptap', // Tiptap
-      'rich-text', // Generic
-      'markup', // Discord
+      'msg-form', 'editor', 'input', 'compose', 'message', 'textbox',
+      'ql-editor', 'ProseMirror', 'DraftEditor', 'slate', 'tiptap',
+      'rich-text', 'markup',
     ];
-    
+
     const hasRichEditorClass = richEditorPatterns.some(pattern => 
       className.toLowerCase().includes(pattern.toLowerCase())
     );
-    
+
     if (hasRichEditorClass) {
       console.log('[TabTab] Found rich editor contenteditable:', className);
       return true;
     }
-    
-    // If it has aria-label suggesting it's an input, include it
+
     if (ariaLabel && (ariaLabel.toLowerCase().includes('message') || 
                        ariaLabel.toLowerCase().includes('write') ||
                        ariaLabel.toLowerCase().includes('type') ||
@@ -774,70 +662,79 @@
       console.log('[TabTab] Found aria-labeled contenteditable:', ariaLabel);
       return true;
     }
-    
-    // If it's multiline, it's likely a real text input
+
     if (ariaMultiline === 'true') {
       console.log('[TabTab] Found multiline contenteditable');
       return true;
     }
-    
+
     return true;
   }
 
-  // Attach listeners to a text input
   function attachListeners(input) {
     if (input.dataset?.tabtabAttached === 'true') return;
-    
+
     const inputType = isContentEditable(input) ? 'contenteditable' : 'standard';
     console.log('[TabTab] Attaching listeners to:', input.tagName, inputType, input.id || input.className);
-    
+
     input.addEventListener('input', handleInput);
     input.addEventListener('keydown', handleKeyDown, true);
     input.addEventListener('blur', handleBlur);
-    input.addEventListener('scroll', handleScroll);
-    
-    // For contenteditable elements, also listen for additional events
-    // that rich text editors might use instead of standard input events
+
     if (inputType === 'contenteditable') {
-      // Some editors use keyup instead of input
       input.addEventListener('keyup', handleContentEditableKeyup);
-      
-      // Some editors use custom events or MutationObserver-based detection
-      // We'll use a subtree observer to catch any text changes
-      // But only start observing when the element is focused (performance optimization)
+
       let textObserver = null;
       let observerDebounceTimer = null;
-      
+
       const startObserving = () => {
         if (textObserver || !isExtensionContextValid()) return;
-        
+
         textObserver = new MutationObserver((mutations) => {
-          // Check if extension is still valid
           if (!isExtensionContextValid()) {
             textObserver.disconnect();
             textObserver = null;
             return;
           }
-          
-          // Debounce the mutation handling
+
+          if (isManipulatingSuggestion) return;
+
+          // Skip mutations that only involve our inline suggestion span
+          const hasRealChange = mutations.some(m => {
+            for (const node of m.addedNodes) {
+              if (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute('data-tabtab-inline')) continue;
+              return true;
+            }
+            for (const node of m.removedNodes) {
+              if (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute('data-tabtab-inline')) continue;
+              return true;
+            }
+            if (m.type === 'characterData') {
+              return !m.target.parentElement?.hasAttribute('data-tabtab-inline');
+            }
+            return false;
+          });
+          if (!hasRealChange) return;
+
           if (observerDebounceTimer) {
             clearTimeout(observerDebounceTimer);
           }
           observerDebounceTimer = setTimeout(() => {
             if (!isExtensionContextValid()) return;
+            if (isManipulatingSuggestion) return;
             if (document.activeElement === input || input.contains(document.activeElement)) {
               handleContentEditableChange(input);
             }
           }, DEBOUNCE_MS);
         });
-        
+
         textObserver.observe(input, {
           childList: true,
           subtree: true,
           characterData: true
         });
       };
-      
+
       const stopObserving = () => {
         if (textObserver) {
           textObserver.disconnect();
@@ -848,87 +745,44 @@
           observerDebounceTimer = null;
         }
       };
-      
-      // Only observe when focused (huge performance improvement)
+
       input.addEventListener('focus', startObserving);
       input.addEventListener('blur', () => {
-        // Delay stopping to allow blur handling to complete
         setTimeout(stopObserving, 200);
       });
-      
-      // If already focused, start observing
+
       if (document.activeElement === input || input.contains(document.activeElement)) {
         startObserving();
       }
-      
-      // Store cleanup function for potential future use
+
       input._tabtabCleanup = stopObserving;
     }
-    
+
     input.dataset.tabtabAttached = 'true';
   }
-  
-  // Handle keyup events for contenteditable (backup for apps that don't fire input events)
+
   function handleContentEditableKeyup(e) {
     if (!isExtensionContextValid()) return;
-    
-    // Only process if it's a character key or backspace/delete
+    if (isManipulatingSuggestion) return;
+
     const isCharacterKey = e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete';
     if (!isCharacterKey) return;
-    
-    // Don't process if Tab or Escape (handled elsewhere)
     if (e.key === 'Tab' || e.key === 'Escape') return;
-    
-    // Create a synthetic input-like event handling
+
     handleInput({ target: e.target });
   }
-  
-  // Handle contenteditable changes detected by MutationObserver
+
+  // Route MutationObserver changes through the shared handleInput debounce
+  // to avoid duplicate API calls from parallel event sources.
   function handleContentEditableChange(el) {
     if (!isExtensionContextValid()) return;
-    if (!isEnabled) return;
-    if (document.activeElement !== el && !el.contains(document.activeElement)) return;
-    
-    const inputType = 'contenteditable';
-    const text = getTextFromElement(el, inputType);
-    
-    console.log('[TabTab] Content change detected, text length:', text.length);
-    
-    // Clear existing suggestion
-    currentSuggestion = '';
-    hidePopup();
-    
-    // Only suggest when cursor is at end of text
-    if (!isCursorAtEnd(el, inputType)) {
-      console.log('[TabTab] Cursor not at end, skipping');
-      return;
-    }
-    
-    // Don't fetch for short text
-    if (text.length < MIN_TEXT_LENGTH) {
-      console.log('[TabTab] Text too short:', text.length);
-      return;
-    }
-    
-    // Fetch suggestion
-    fetchSuggestion(text).then((suggestion) => {
-      if (document.activeElement === el || el.contains(document.activeElement)) {
-        if (isCursorAtEnd(el, inputType) && suggestion) {
-          currentSuggestion = suggestion;
-          currentInput = el;
-          currentInputType = inputType;
-          console.log('[TabTab] Showing popup with suggestion:', suggestion);
-          showPopup(el, suggestion);
-        }
-      }
-    });
+    if (isManipulatingSuggestion) return;
+    handleInput({ target: el });
   }
 
-  // Find and attach to contenteditable elements
-  // Optimized: Single query with combined selectors, no expensive generic element scan
+  // ─── Element discovery ─────────────────────────────────────────────
+
   function findContentEditables(root = document) {
-    // Combined selector for all contenteditable-related elements
-    // This is much more efficient than multiple separate queries
     const combinedSelector = [
       '[contenteditable="true"]',
       '[role="textbox"]',
@@ -939,14 +793,13 @@
       '[data-slate-editor]',
       '.tiptap'
     ].join(', ');
-    
+
     try {
       const elements = root.querySelectorAll(combinedSelector);
       elements.forEach((el) => {
-        // Skip if already processed (avoid redundant work)
         if (processedElements.has(el)) return;
         processedElements.add(el);
-        
+
         if (isContentEditable(el) && isValidContentEditable(el)) {
           attachListeners(el);
         }
@@ -956,7 +809,6 @@
     }
   }
 
-  // Initialize
   function initialize() {
     const inputs = document.querySelectorAll('input, textarea');
     inputs.forEach((input) => {
@@ -966,21 +818,20 @@
         attachListeners(input);
       }
     });
-    
+
     findContentEditables();
-    
-    console.log('[TabTab] Content script initialized (popup mode)');
+
+    console.log('[TabTab] Content script initialized (inline suggestion mode)');
   }
 
-  // Process mutations in a throttled manner
+  // ─── Mutation observer for dynamic content ─────────────────────────
+
   function processPendingMutations() {
     if (!isExtensionContextValid()) return;
-    
+
     pendingMutations = false;
     mutationThrottleTimer = null;
-    
-    // Instead of processing each mutation individually,
-    // just scan for new inputs in the document (more efficient)
+
     const inputs = document.querySelectorAll('input, textarea');
     inputs.forEach((input) => {
       if (processedElements.has(input)) return;
@@ -989,19 +840,16 @@
         attachListeners(input);
       }
     });
-    
+
     findContentEditables();
   }
 
-  // Watch for dynamically added inputs with throttling
   const observer = new MutationObserver((mutations) => {
-    // Check if extension is still valid
     if (!isExtensionContextValid()) {
       observer.disconnect();
       return;
     }
-    
-    // Quick check: only process if there might be new inputs
+
     let hasRelevantChanges = false;
     for (const mutation of mutations) {
       if (mutation.type === 'attributes' && mutation.attributeName === 'contenteditable') {
@@ -1011,7 +859,6 @@
       if (mutation.addedNodes.length > 0) {
         for (const node of mutation.addedNodes) {
           if (node.nodeType === Node.ELEMENT_NODE) {
-            // Quick heuristic: check if this might contain inputs
             if (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA' ||
                 node.hasAttribute?.('contenteditable') ||
                 node.querySelector?.('input, textarea, [contenteditable]')) {
@@ -1023,45 +870,40 @@
       }
       if (hasRelevantChanges) break;
     }
-    
+
     if (!hasRelevantChanges) return;
-    
-    // Throttle mutation processing to avoid overwhelming the browser
+
     pendingMutations = true;
     if (!mutationThrottleTimer) {
       mutationThrottleTimer = setTimeout(processPendingMutations, MUTATION_THROTTLE_MS);
     }
   });
 
-  // Only observe childList changes, not every attribute change
   observer.observe(document.body, {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ['contenteditable'] // Only watch contenteditable attribute
+    attributeFilter: ['contenteditable']
   });
 
-  // Periodic check for new contenteditables (reduced frequency)
   const periodicCheckInterval = setInterval(() => {
-    // Stop interval if extension is invalidated
     if (!isExtensionContextValid()) {
       clearInterval(periodicCheckInterval);
       return;
     }
-    // Only scan if user is actively focused on the page
     if (document.hasFocus()) {
       findContentEditables();
     }
   }, PERIODIC_SCAN_MS);
 
-  // Use requestIdleCallback to defer initialization and not block page load
+  // ─── Deferred initialization ───────────────────────────────────────
+
   function deferredInit() {
     if (typeof requestIdleCallback !== 'undefined') {
       requestIdleCallback(() => {
         initialize();
-      }, { timeout: 2000 }); // Max 2 second delay
+      }, { timeout: 2000 });
     } else {
-      // Fallback for browsers without requestIdleCallback
       setTimeout(initialize, 100);
     }
   }

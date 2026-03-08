@@ -2,7 +2,9 @@
 
 ## Purpose
 
-Injected into every webpage to detect text inputs, extract app-specific context, show suggestion popups, and handle user interactions (Tab to accept, Escape to dismiss).
+Injected into every webpage to detect text inputs, show inline grey text suggestions (Gmail-style) on supported sites, and handle user interactions (Tab to accept, Escape to dismiss).
+
+**Supported sites for inline suggestions:** LinkedIn DM only (more to be added).
 
 ## Files
 
@@ -22,39 +24,65 @@ const PERIODIC_SCAN_MS = 10000;    // Periodic contenteditable scan interval
 - `currentInput` - Currently focused input element
 - `currentInputType` - 'standard' or 'contenteditable'
 - `currentSuggestion` - Active suggestion text
-- `popupElement` - The suggestion popup DOM element
 - `debounceTimer` - Timer for debouncing input
 - `isEnabled` - Whether extension is enabled
 - `isExtensionValid` - Whether extension context is still valid
 - `mutationThrottleTimer` - Timer for throttling mutation processing
 - `pendingMutations` - Flag for pending mutation processing
 - `processedElements` - WeakSet tracking already-processed elements
+- `inlineSuggestionSpan` - Reference to the current inline suggestion `<span>` in the DOM
+- `isManipulatingSuggestion` - Guard flag to prevent MutationObserver re-triggers when inserting/removing the suggestion span
 
 #### Key Functions
 
 | Function | Purpose |
 |----------|---------|
-| `createPopup()` | Creates styled suggestion popup element |
-| `showPopup(inputEl, suggestion)` | Positions and displays popup above input |
-| `hidePopup()` | Hides the popup |
+| `isSupportedInlineSite(el)` | Gates suggestions to supported site+element combos (LinkedIn DM only for now) |
+| `showInlineSuggestion(el, suggestion)` | Inserts grey `<span>` at cursor position in contenteditable |
+| `removeInlineSuggestion()` | Removes the inline suggestion span from the DOM |
+| `acceptInlineSuggestion(el)` | Converts suggestion span text to real content |
 | `handleInput(e)` | Debounced handler for input events |
 | `handleKeyDown(e)` | Handles Tab (accept) and Escape (dismiss) |
 | `handleBlur(e)` | Clears suggestion when input loses focus |
-| `insertTextAtCursor(el, text, inputType)` | Inserts suggestion text |
+| `insertTextAtCursor(el, text, inputType)` | Inserts text at cursor position |
 | `fetchSuggestion(text)` | Fetches suggestion with app context and custom tone |
 | `getCustomTone(app)` | Retrieves custom tone for app from storage |
+| `getTextFromElement(el, inputType)` | Extracts text, excluding inline suggestion span |
+| `isCursorAtEnd(el, inputType)` | Multi-method cursor position detection (accounts for inline span) |
 | `attachListeners(input)` | Attaches all event listeners to an input |
 | `isValidStandardInput(el)` | Checks if element is a valid input/textarea |
 | `isValidContentEditable(el)` | Checks if element is valid contenteditable |
 | `findContentEditables(root)` | Scans for contenteditable elements |
 | `tryExecCommand(el, text)` | Attempts execCommand for editor compatibility |
 | `dispatchInputEvents(el, text)` | Dispatches events for different frameworks |
-| `isCursorAtEnd(el, inputType)` | Multi-method cursor position detection |
-| `getLastTextNode(el)` | Helper: gets last text node in element |
-| `getLastMeaningfulChild(el)` | Helper: gets last meaningful child node |
+| `getLastTextNode(el)` | Helper: gets last text node, skipping inline suggestion |
+| `getLastMeaningfulChild(el)` | Helper: gets last meaningful child, skipping inline suggestion |
 | `isExtensionContextValid()` | Checks if extension context is still valid |
 | `safeSendMessage(message, callback)` | Safe wrapper for chrome.runtime.sendMessage |
 | `cleanup()` | Cleanup when extension is invalidated |
+
+#### Inline Suggestion Display
+
+Suggestions are shown as inline grey text (Gmail-style) by inserting a `<span data-tabtab-inline="true" contenteditable="false">` at the cursor position inside the contenteditable element. Key behaviors:
+
+- The span has `contentEditable="false"` so it acts as a non-editable island
+- Cursor is positioned before the span so typing continues normally
+- `getTextFromElement()` clones the element and strips the span to get clean text
+- `isCursorAtEnd()` treats "cursor before suggestion span with nothing after" as "at end"
+- `getLastTextNode()` and `getLastMeaningfulChild()` skip nodes inside the span
+- `isManipulatingSuggestion` flag prevents MutationObserver from re-triggering during DOM changes
+
+#### Site Gating
+
+`isSupportedInlineSite(el)` controls which inputs get suggestions:
+```javascript
+function isSupportedInlineSite(el) {
+  if (!isContentEditable(el)) return false;
+  if (window.TabTabLinkedIn?.isLinkedIn()) return true; // LinkedIn DM
+  return false;
+}
+```
+To add a new site, add another condition here.
 
 #### App Context Integration
 
@@ -77,7 +105,7 @@ safeSendMessage({ type: 'GET_SUGGESTION', text, context, app, customTone }, ...)
 
 #### Input Detection
 
-**Standard inputs**: `<textarea>`, `<input type="text|search|email|url">`
+**Standard inputs**: `<textarea>`, `<input type="text|search|email|url">` (listeners attached but no suggestions shown unless site is supported)
 
 **Contenteditable**: Elements with `contenteditable="true"`, `role="textbox"`, `aria-multiline="true"`, or common editor classes
 
@@ -94,7 +122,7 @@ Watches for:
 - Contenteditable attribute changes
 - Dynamically loaded content (SPAs)
 
-Uses throttling (500ms) to avoid performance issues.
+Uses throttling (500ms) to avoid performance issues. Skips mutations when `isManipulatingSuggestion` is true.
 
 #### Periodic Scan
 
@@ -130,19 +158,11 @@ Site-specific context extractors loaded before content.js:
 
 ### styles.css
 
-Minimal CSS overrides to ensure popup displays correctly on all sites:
-- Forces high z-index
-- Resets box-sizing
-- Prevents site styles from affecting popup
-
-## Popup Design
-
-The popup appears ABOVE the input field with:
-- Dark gradient background (adapts to light mode via media query)
-- Header with "TabTab Suggestion" title and keyboard icon
-- Blue "Tab to accept" button
-- Smooth slide-down animation
-- Max width of 500px, min width of 250px
+CSS for the inline suggestion `<span>`:
+- Grey color (`#999`)
+- Inherits font properties from parent (size, family, weight, line-height)
+- Non-interactive (`pointer-events: none`, `user-select: none`)
+- Resets background, border, padding, margin to blend in
 
 ## Communication
 
@@ -172,5 +192,5 @@ Logs include:
 - Input detection events
 - Suggestion fetch requests
 - Context extraction results
-- Popup display events
+- Inline suggestion display/accept/remove events
 - Error states

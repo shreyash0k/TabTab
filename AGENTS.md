@@ -90,8 +90,8 @@ extension/
 ├── background/
 │   └── service-worker.js      # API calls, Supabase sync
 ├── content/
-│   ├── content.js             # Text field detection, popup suggestions
-│   ├── styles.css             # Popup styling overrides
+│   ├── content.js             # Text field detection, inline grey text suggestions
+│   ├── styles.css             # Inline suggestion styling
 │   ├── discord-extractor.js   # Discord context extraction
 │   ├── linkedin-extractor.js  # LinkedIn context extraction
 │   ├── slack-extractor.js     # Slack context extraction
@@ -106,10 +106,11 @@ extension/
 
 ### How It Works
 1. Content script detects `<textarea>`, `<input>`, and `contenteditable` elements
-2. Site-specific extractors detect Discord/LinkedIn/Slack/Twitter and extract conversation context
-3. On typing (300ms debounce), sends text + context to hosted API via service worker
-4. Displays suggestion in a popup above the input field
-5. Tab accepts suggestion, Escape dismisses
+2. `isSupportedInlineSite(el)` gates suggestions to supported sites only (LinkedIn DM for now)
+3. Site-specific extractors detect Discord/LinkedIn/Slack/Twitter and extract conversation context
+4. On typing (300ms debounce), sends text + context to hosted API via service worker
+5. Displays suggestion as inline grey text (Gmail-style) at cursor position
+6. Tab accepts suggestion, Escape dismisses, typing clears
 
 ### App-Specific Context
 The extension extracts recent messages/tweets for context-aware suggestions:
