@@ -1,6 +1,6 @@
 // TabTab Content Script
 // Detects text fields and shows inline grey text suggestions (Gmail-style)
-// Currently supported: LinkedIn DM only
+// Supported: LinkedIn DM (DOM insertion), Slack (overlay mode for Quill editor)
 
 (function() {
   'use strict';
@@ -20,6 +20,7 @@
   let pendingMutations = false;
   let processedElements = new WeakSet();
   let inlineSuggestionSpan = null;
+  let overlayElement = null;
   let isManipulatingSuggestion = false;
 
   // Check if extension context is still valid
@@ -101,15 +102,16 @@
   }
 
   // Gate: only show inline suggestions on supported site+element combos.
-  // Currently LinkedIn DM only. Add more sites here as support is added.
+  // Add more sites by adding conditions below.
   function isSupportedInlineSite(el) {
     if (!isContentEditable(el)) return false;
 
-    if (window.TabTabLinkedIn?.isLinkedIn()) {
-      const className = (el.className || '').toLowerCase();
-      const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
-      const role = el.getAttribute('role');
+    const className = (el.className || '').toLowerCase();
+    const ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+    const role = el.getAttribute('role');
 
+    // LinkedIn DM
+    if (window.TabTabLinkedIn?.isLinkedIn()) {
       if (className.includes('msg-form') ||
           role === 'textbox' ||
           ariaLabel.includes('message')) {
@@ -117,6 +119,24 @@
       }
     }
 
+    // Slack message input
+    if (window.TabTabSlack?.isSlack()) {
+      if (role === 'textbox' ||
+          className.includes('ql-editor') ||
+          ariaLabel.includes('message')) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  // Editors like Quill (Slack) normalize their DOM, stripping foreign nodes.
+  // For these, we render the suggestion as an overlay outside the editor.
+  function useOverlayMode(el) {
+    if (window.TabTabSlack?.isSlack()) return true;
+    const className = (el.className || '').toLowerCase();
+    if (className.includes('ql-editor')) return true;
     return false;
   }
 
@@ -129,27 +149,36 @@
   }
 
   function removeInlineSuggestion() {
-    if (!inlineSuggestionSpan) {
-      // Fallback: remove any orphaned spans in the DOM
-      const orphans = document.querySelectorAll('[data-tabtab-inline]');
-      if (orphans.length === 0) return;
+    // Remove overlay element (used for Quill/Slack)
+    if (overlayElement) {
+      if (overlayElement.parentNode) {
+        overlayElement.parentNode.removeChild(overlayElement);
+      }
+      overlayElement = null;
+    }
 
+    // Remove DOM-inserted span (used for LinkedIn etc.)
+    if (inlineSuggestionSpan) {
       isManipulatingSuggestion = true;
-      orphans.forEach(span => span.remove());
+      try {
+        if (inlineSuggestionSpan.parentNode) {
+          inlineSuggestionSpan.parentNode.removeChild(inlineSuggestionSpan);
+        }
+      } catch (e) {
+        console.log('[TabTab] Error removing inline suggestion:', e);
+      }
+      inlineSuggestionSpan = null;
       endManipulation();
       return;
     }
 
-    isManipulatingSuggestion = true;
-    try {
-      if (inlineSuggestionSpan.parentNode) {
-        inlineSuggestionSpan.parentNode.removeChild(inlineSuggestionSpan);
-      }
-    } catch (e) {
-      console.log('[TabTab] Error removing inline suggestion:', e);
+    // Fallback: remove any orphaned spans in the DOM
+    const orphans = document.querySelectorAll('[data-tabtab-inline]');
+    if (orphans.length > 0) {
+      isManipulatingSuggestion = true;
+      orphans.forEach(span => span.remove());
+      endManipulation();
     }
-    inlineSuggestionSpan = null;
-    endManipulation();
   }
 
   function showInlineSuggestion(el, suggestion) {
@@ -160,6 +189,62 @@
 
     removeInlineSuggestion();
 
+    if (useOverlayMode(el)) {
+      showTooltipSuggestion(el, suggestion);
+    } else {
+      showDomSuggestion(el, suggestion);
+    }
+  }
+
+  // Tooltip mode: render suggestion as a small tooltip bubble near the cursor.
+  // Used for Quill-based editors (Slack) that normalize their DOM.
+  function showTooltipSuggestion(el, suggestion) {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+
+    const range = selection.getRangeAt(0).cloneRange();
+    range.collapse(false);
+    const cursorRect = range.getBoundingClientRect();
+
+    if (!cursorRect || (cursorRect.width === 0 && cursorRect.height === 0 &&
+                        cursorRect.top === 0 && cursorRect.left === 0)) {
+      return;
+    }
+
+    const tooltip = document.createElement('div');
+    tooltip.setAttribute('data-tabtab-overlay', 'true');
+    tooltip.innerHTML = `<span class="tabtab-tooltip-text"></span><span class="tabtab-tooltip-hint">Tab</span>`;
+    tooltip.querySelector('.tabtab-tooltip-text').textContent = suggestion;
+
+    document.body.appendChild(tooltip);
+
+    // Measure tooltip to position correctly
+    const tooltipRect = tooltip.getBoundingClientRect();
+
+    // Default: show above the cursor
+    let top = cursorRect.top - tooltipRect.height - 6;
+    let left = cursorRect.left;
+
+    // If it would go above the viewport, show below instead
+    if (top < 4) {
+      top = cursorRect.bottom + 6;
+    }
+
+    // Keep within viewport horizontally
+    if (left + tooltipRect.width > window.innerWidth - 8) {
+      left = window.innerWidth - tooltipRect.width - 8;
+    }
+    if (left < 4) left = 4;
+
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+
+    overlayElement = tooltip;
+  }
+
+  // DOM mode: insert a grey <span> directly into the contenteditable.
+  // Used for editors that don't normalize DOM (LinkedIn).
+  function showDomSuggestion(el, suggestion) {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
 
@@ -175,7 +260,6 @@
       range.collapse(false);
       range.insertNode(span);
 
-      // Move cursor back before the span so subsequent typing stays in front
       const newRange = document.createRange();
       newRange.setStartBefore(span);
       newRange.setEndBefore(span);
@@ -191,13 +275,22 @@
   }
 
   function acceptInlineSuggestion(el) {
+    // Overlay mode (Slack/Quill) -- use currentSuggestion rather than
+    // reading from the tooltip DOM which includes the "Tab" hint text.
+    if (overlayElement) {
+      const text = currentSuggestion;
+      removeInlineSuggestion();
+      insertTextAtCursor(el, text, 'contenteditable');
+      return;
+    }
+
+    // DOM mode (LinkedIn)
     if (!inlineSuggestionSpan) return;
 
     const text = inlineSuggestionSpan.textContent;
 
     isManipulatingSuggestion = true;
     try {
-      // Place cursor where the span is, then remove the span
       const selection = window.getSelection();
       const range = document.createRange();
       range.setStartBefore(inlineSuggestionSpan);
@@ -215,7 +308,6 @@
     }
     endManipulation();
 
-    // Now insert the text as real content
     insertTextAtCursor(el, text, 'contenteditable');
   }
 
@@ -597,6 +689,14 @@
     }, 150);
   }
 
+  // Dismiss overlay on any scroll (it uses fixed positioning so it won't follow)
+  function handleScroll() {
+    if (overlayElement && currentSuggestion) {
+      currentSuggestion = '';
+      removeInlineSuggestion();
+    }
+  }
+
   // ─── Input detection & listener attachment ─────────────────────────
 
   function isValidStandardInput(el) {
@@ -680,6 +780,7 @@
     input.addEventListener('input', handleInput);
     input.addEventListener('keydown', handleKeyDown, true);
     input.addEventListener('blur', handleBlur);
+    input.addEventListener('scroll', handleScroll);
 
     if (inputType === 'contenteditable') {
       input.addEventListener('keyup', handleContentEditableKeyup);

@@ -145,8 +145,8 @@ Inline grey text suggestions are gated by `isSupportedInlineSite(el)`. Currently
 | Site | Input Type | Status |
 |------|-----------|--------|
 | LinkedIn DM | contenteditable (msg-form) | Supported |
+| Slack | contenteditable (ql-editor / textbox) | Supported |
 | Discord | contenteditable | Not yet supported |
-| Slack | contenteditable | Not yet supported |
 | Twitter/X | contenteditable | Not yet supported |
 | Generic `<textarea>` / `<input>` | standard | Not yet supported |
 
