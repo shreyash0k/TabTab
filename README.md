@@ -1,6 +1,6 @@
 # TabTab
 
-GitHub Copilot style autocomplete for web. Type something, get text suggestions, press **Tab** to accept.
+Get Gmail style autocomplete suggestions across websites like LinkedIn, Slack, Discord. 
 
 ## Demo
 
