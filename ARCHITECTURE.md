@@ -192,3 +192,7 @@ flowchart LR
 6. `extension/popup/popup.js`
 7. `extension/content/*-extractor.js`
 8. `extension/lib/supabase.js`
+
+
+# todo 
+Understand the codebase. 
