@@ -9,8 +9,7 @@ TabTab is a GitHub Copilot-style text autocomplete web app. It shows inline ghos
 - Next.js 14 (App Router)
 - React 18 with TypeScript
 - Tailwind CSS
-- Cerebras API with Llama 3.3 70B for suggestions (ultra-fast inference)
-- Groq SDK (available as alternative provider)
+- Groq SDK with Meta Llama 3.1 8B Instant for suggestions
 
 ## Commands
 
@@ -25,14 +24,14 @@ npm run lint       # Run ESLint
 
 Requires `.env.local` with:
 ```
-CEREBRAS_API_KEY=your_key_here
+GROQ_API_KEY=your_key_here
 ```
 
 ## Architecture
 
 ```
 app/
-├── api/suggest/route.ts          # POST endpoint for Cerebras completions
+├── api/suggest/route.ts          # POST endpoint for Groq completions
 ├── components/
 │   └── AutocompleteTextarea.tsx  # Dual-layer ghost text component
 ├── hooks/
@@ -54,12 +53,12 @@ Uses dual-layer technique: transparent textarea over a mirror div that renders s
 
 ### Suggestion Flow
 1. User types → 250ms debounce → POST to `/api/suggest` with text before cursor
-2. Cerebras returns completion → displayed as ghost text at cursor
+2. Groq returns completion → displayed as ghost text at cursor
 3. Tab accepts (inserts at cursor), Escape dismisses, typing clears
 
 ### API Configuration
-- Provider: Cerebras (ultra-fast inference, ~6x faster than alternatives)
-- Model: `llama-3.3-70b`
+- Provider: Groq
+- Model: `llama-3.1-8b-instant`
 - Max tokens: 25 (Concise) or 50 (Longer)
 - Minimum input: 5 characters
 - API accepts: `text`, `context` (array), `app` (platform), `customTone`, `suggestionLength`
