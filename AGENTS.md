@@ -2,13 +2,12 @@
 
 ## Project Overview
 
-TabTab is a GitHub Copilot-style text autocomplete web app. It shows inline ghost text suggestions as users type and accepts them with Tab.
+TabTab is an extension-first AI text autocomplete project. The Chrome extension provides inline ghost text suggestions, and a local Next.js API route powers completion generation.
 
 ## Tech Stack
 
 - Next.js 14 (App Router)
 - React 18 with TypeScript
-- Tailwind CSS
 - Groq SDK with Meta Llama 3.1 8B Instant for suggestions
 
 ## Commands
@@ -31,30 +30,24 @@ GROQ_API_KEY=your_key_here
 
 ```
 app/
-├── api/suggest/route.ts          # POST endpoint for Groq completions
-├── components/
-│   └── AutocompleteTextarea.tsx  # Dual-layer ghost text component
-├── hooks/
-│   └── useAutocomplete.ts        # Debouncing, state, request management
-├── globals.css                   # Global styles and Tailwind imports
-├── layout.tsx                    # Root layout component
-└── page.tsx                      # Main page
+└── api/suggest/route.ts          # POST endpoint for Groq completions
+
+extension/
+├── manifest.json                 # Chrome MV3 manifest
+├── background/service-worker.js  # API calls, state management, Supabase sync
+├── content/content.js            # Input detection and inline suggestions
+├── popup/popup.js                # Extension controls
+└── lib/supabase.js               # Cloud preference sync
 ```
 
 ## Key Implementation Details
 
-### Ghost Text Overlay
-Uses dual-layer technique: transparent textarea over a mirror div that renders suggestions in gray at the cursor position.
-
-### Cursor Position Tracking
-- Tracks cursor position via `onSelect` and `onClick` events
-- Suggestions only appear when cursor is at end of text (avoids ghost text overlap)
-- Accepting inserts at cursor position using `setSelectionRange`
-
 ### Suggestion Flow
-1. User types → 250ms debounce → POST to `/api/suggest` with text before cursor
-2. Groq returns completion → displayed as ghost text at cursor
-3. Tab accepts (inserts at cursor), Escape dismisses, typing clears
+1. User types in a supported editor on a supported site
+2. Content script debounces input (300ms), extracts app context, and reads custom tone
+3. Service worker calls `POST /api/suggest` with text, context, app, tone, and suggestion length
+4. Groq returns completion and extension renders it as inline gray text
+5. Tab accepts suggestion, Escape dismisses, typing clears
 
 ### API Configuration
 - Provider: Groq
@@ -68,14 +61,10 @@ The extension popup allows users to choose between two suggestion lengths:
 - **Concise** (default): Very brief completions (5-15 words, 25 tokens)
 - **Longer**: Fuller completions (1-2 sentences, 50 tokens)
 
-Note: The web app uses the default "Concise" setting. Suggestion length toggle is only available in the Chrome extension.
-
 ## Code Style
 
-- Functional React components with hooks
 - TypeScript strict mode
-- Tailwind for styling
-- Client components marked with `'use client'`
+- Plain JavaScript for extension runtime files
 
 ## Chrome Extension
 
@@ -107,7 +96,7 @@ extension/
 1. Content script detects `<textarea>`, `<input>`, and `contenteditable` elements
 2. `isSupportedInlineSite(el)` gates suggestions to supported sites only (LinkedIn DM for now)
 3. Site-specific extractors detect Discord/LinkedIn/Slack/Twitter and extract conversation context
-4. On typing (300ms debounce), sends text + context to hosted API via service worker
+4. On typing (300ms debounce), sends text + context to local API via service worker
 5. Displays suggestion as inline grey text (Gmail-style) at cursor position
 6. Tab accepts suggestion, Escape dismisses, typing clears
 

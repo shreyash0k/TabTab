@@ -4,20 +4,13 @@ This document explains how TabTab is structured and how data flows through the s
 
 ## Overview
 
-TabTab is an AI autocomplete product with two clients:
+TabTab is an extension-first AI autocomplete product:
 
-- A Next.js web app for direct usage and local testing.
 - A Chrome extension that injects autocomplete behavior into supported text editors on external websites.
-
-Both clients use the same backend API route (`/api/suggest`) to generate continuation text suggestions.
+- A local backend API route (`/api/suggest`) that generates continuation suggestions for the extension.
 
 ## High-Level Components
 
-- **Web app UI**: Renders textarea + ghost text overlay and handles keyboard acceptance.
-  - `app/page.tsx`
-  - `app/components/AutocompleteTextarea.tsx`
-- **Web app autocomplete state**: Debouncing, request cancellation, cursor tracking, and acceptance logic.
-  - `app/hooks/useAutocomplete.ts`
 - **Suggestion API**: Prompt construction, model call, CORS handling, and fallback behavior.
   - `app/api/suggest/route.ts`
 - **Extension content runtime**: Input discovery, context extraction, inline/overlay rendering, keyboard handling.
@@ -39,8 +32,6 @@ Both clients use the same backend API route (`/api/suggest`) to generate continu
 ```mermaid
 flowchart LR
     user[UserTyping]
-    webUi[WebAppUI]
-    webHook[useAutocomplete]
     contentScript[ExtensionContentScript]
     extractors[AppContextExtractors]
     sw[ExtensionServiceWorker]
@@ -48,10 +39,6 @@ flowchart LR
     model[GroqLlamaModel]
     storage[ChromeStorageSync]
     cloud[SupabasePreferences]
-
-    user --> webUi
-    webUi --> webHook
-    webHook -->|POST /api/suggest| api
 
     user --> contentScript
     contentScript --> extractors
@@ -61,7 +48,6 @@ flowchart LR
 
     api --> model
     model --> api
-    api --> webHook
     api --> sw
     sw --> contentScript
 
@@ -71,21 +57,7 @@ flowchart LR
 
 ## End-to-End Request Flows
 
-### 1) Web App Suggestion Flow
-
-1. User types in `AutocompleteTextarea`.
-2. `useAutocomplete` updates local text/cursor state.
-3. Hook debounces by `250ms` and only proceeds if:
-   - input length is at least `5`, and
-   - cursor is at end of text.
-4. Hook sends `POST /api/suggest` with `text`.
-5. API builds prompt, calls model, returns `{ suggestion }`.
-6. UI renders suggestion as ghost text at cursor position.
-7. Keyboard controls:
-   - `Tab`: insert suggestion at cursor.
-   - `Escape`: dismiss suggestion.
-
-### 2) Extension Suggestion Flow
+### Extension Suggestion Flow
 
 1. Content script discovers editable targets (`input`, `textarea`, `contenteditable`) and attaches listeners.
 2. On input, it gates by site/editor support and checks cursor-at-end and min length.
@@ -119,16 +91,21 @@ flowchart LR
   - returns `{ suggestion }`,
   - returns empty suggestion on failures to avoid breaking UI typing flow.
 
+## API Request Contract
+
+`POST /api/suggest` accepts:
+
+- `text: string` (required)
+- `context?: string[]`
+- `app?: 'discord' | 'linkedin' | 'slack' | 'twitter' | null`
+- `customTone?: string | null`
+- `suggestionLength?: 'short' | 'normal'`
+
+Returns:
+
+- `{ suggestion: string }`
+
 ## File Responsibility Map
-
-### Web App
-
-- `app/page.tsx`
-  - Main screen shell and mounting point for the autocomplete component.
-- `app/components/AutocompleteTextarea.tsx`
-  - Two-layer rendering (mirror + textarea), scroll sync, key handling.
-- `app/hooks/useAutocomplete.ts`
-  - Core state machine: text, suggestion, cursor position, debounce, abort/cancel, acceptance/dismissal.
 
 ### Extension Runtime
 
@@ -169,7 +146,6 @@ flowchart LR
 - Suggestions only trigger when cursor is at the logical end of content.
 - Minimum input length is `5` characters (web and extension paths).
 - Debounce differs by surface:
-  - web hook: `250ms`,
   - extension content script: `300ms`.
 - Extension handles hostile/complex editors with two rendering modes (DOM-inserted span vs overlay).
 - Errors degrade gracefully to empty suggestion to preserve typing experience.
@@ -178,21 +154,14 @@ flowchart LR
 ## Known Caveats and Alignment Notes
 
 - Extension support is gated in `isSupportedInlineSite(...)`; despite broad messaging, inline suggestions are currently constrained by site/editor checks.
-- `extension/README.md` still mentions a `10`-character minimum, while implementation uses `5`.
 - Project docs may reference Cerebras, but current API implementation uses the Groq SDK model path in `app/api/suggest/route.ts`.
 - Selector-based context extraction can break when target sites change DOM structure; fallback selectors reduce but do not eliminate this risk.
 
 ## Suggested Reading Order for New Contributors
 
-1. `app/components/AutocompleteTextarea.tsx`
-2. `app/hooks/useAutocomplete.ts`
-3. `app/api/suggest/route.ts`
-4. `extension/content/content.js`
-5. `extension/background/service-worker.js`
-6. `extension/popup/popup.js`
-7. `extension/content/*-extractor.js`
-8. `extension/lib/supabase.js`
-
-
-# todo 
-Understand the codebase. 
+1. `app/api/suggest/route.ts`
+2. `extension/content/content.js`
+3. `extension/background/service-worker.js`
+4. `extension/popup/popup.js`
+5. `extension/content/*-extractor.js`
+6. `extension/lib/supabase.js`
