@@ -6,7 +6,7 @@ The Chrome extension injects inline ghost text suggestions into supported editor
 
 ## Demo
 
-[![TabTab Demo Video](assets/demo-thumbnail.png)](https://www.loom.com/share/25a3b04eee294267aa72234ba914aa35)
+[![TabTab Demo Video](assets/demo-thumbnail.png)](https://www.youtube.com/watch?v=eohVp8kaG1Q)
 
 ## Features
 
